@@ -113,3 +113,7 @@ python3 tools/update_stock.py /путь/к/csv
 - `reservations.js` / `reservations.json` — активные брони из вкладки «Бронь»
 - `tools/update_stock.py`, `tools/process_orders.py`, `tools/sync_reservations.py`, `tools/common.py`, `tools/apps-script/Code.gs`, `APPS-SCRIPT-SETUP.md`
 - `images/` — фото изделий; `screenshots/` — скриншоты теста
+
+## Фото товаров («отрендеренные» копии)
+Сайт показывает улучшенные копии из `images/hd/<категория>/<id>.webp` (обрезка полей, апскейл, резкость, единый квадратный холст 360×360). Оригиналы лежат в `images/<категория>/` и подставляются автоматически, если hd-копии нет. После добавления новых фото запустите: `python3 tools/enhance_images.py`.
+Фон блока «Хиты продаж» и стартового экрана — `images/bg/stage.jpg` (Unsplash, свободная лицензия).

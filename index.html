@@ -5,6 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Рок-мерч — брелоки, значки, магниты, серьги оптом и в розницу | Производство в России</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E%E2%98%85%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@600;700;800;900&family=Manrope:wght@400;500;600;700;800&display=swap&subset=cyrillic" rel="stylesheet">
+<meta name="theme-color" content="#0a0a0f">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -60,8 +64,15 @@
         <li><b>от 1 шт</b> без минимального заказа</li>
       </ul>
     </div>
-    <div class="hero-collage" id="heroCollage"></div>
   </div>
+
+  <section class="bands-showcase" aria-labelledby="bandsShowcaseTitle">
+    <div class="bands-showcase-head">
+      <h2 id="bandsShowcaseTitle">Хиты продаж</h2>
+      <a class="bands-all" href="#catalog">Все группы в каталоге →</a>
+    </div>
+    <div class="hero-collage" id="heroCollage"></div>
+  </section>
 
   <h2 class="section-title" id="unitPriceHead">Цены (тираж 500–999 шт)</h2>
   <div class="price-cards" id="priceCards"></div>
@@ -91,6 +102,13 @@
     <h1 id="catalogTitle">Каталог</h1>
     <div class="catalog-tools">
       <input type="search" id="search" placeholder="Поиск по названию: Metallica, Ария…" autocomplete="off">
+      <label class="sort-sel"><span>Сортировка</span>
+        <select id="sortSel" aria-label="Сортировка товаров">
+          <option value="default">По умолчанию</option>
+          <option value="stock">В наличии — сначала</option>
+          <option value="alpha">По алфавиту (А–Я)</option>
+        </select>
+      </label>
       <label class="stock-filter"><input type="checkbox" id="onlyStock"> Только в наличии</label>
     </div>
   </div>

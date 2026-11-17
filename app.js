@@ -34,6 +34,9 @@ const EXTRA_ALIASES = {
   acdc:['acdc','ac/dc','ac-dc'],
   leningrad:['ленинград','в питере пить','shnur','шнор']
 };
+// «Отрендеренные» копии фото (tools/enhance_images.py): images/<cat>/<id>.jpg → images/hd/<cat>/<id>.webp; при ошибке — оригинал
+function hdImg(src){ return String(src||'').replace(/^images\/(keychains|magnets|pins|earrings)\/([^/]+)\.jpg$/i, 'images/hd/$1/$2.webp'); }
+function imgTag(src, alt, extra){ const o = esc(src), h = esc(hdImg(src)); return `<img src="${h}" alt="${esc(alt||'')}" ${extra||''} onerror="if(this.src.indexOf('${o}')<0){this.src='${o}'}">`; }
 function bandNameOf(p){ return p.band || String(p.name||'').replace(/\s+лого$/i,'').replace(/\s+[1-9]$/,'').trim(); }
 function slugifyBand(name){
   const o = {'Король и Шут':'kish','Кино (Цой)':'kino','Алиса':'alisa','AC/DC':'acdc',"Guns N' Roses":'guns-n-roses','Red Hot Chili Peppers':'rhcp','System of a Down':'soad','Five Finger Death Punch':'5fdp','Bring Me The Horizon':'bmth','The Beatles':'beatles','The Offspring':'offspring','The Exploited':'exploited','The Rolling Stones':'rolling-stones','The Prodigy':'prodigy','Mötley Crüe':'motley-crue','Motörhead':'motorhead','W.A.S.P.':'wasp','Чиж & Co':'chizh','Lindemann':'lindemann','Ленинград':'leningrad','21 Pilots':'21-pilots'};
@@ -180,7 +183,7 @@ function calc(cart, pmId){
 // ---------- state ----------
 let cart = load(LS_CART, {});
 const pending = {}; // qty selected on cards not yet in cart
-let activeCat = 'all', query = '', onlyStock = false, activeBand = '', bandQuery = '';
+let activeCat = 'all', query = '', onlyStock = false, activeBand = '', bandQuery = '', sortMode = (() => { try { const v = localStorage.getItem('merch_sort'); return ['default','stock','alpha'].includes(v) ? v : 'default'; } catch(_) { return 'default'; } })();
 function load(k, d){ try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch(e){ return d; } }
 function save(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch(e){ console.warn(e); return false; } }
 function setQty(id, q){
@@ -233,14 +236,14 @@ function initStatic(){
   // collage: six featured bands, each links to the catalog filtered by that band
   $('#heroCollage').innerHTML = FEATURED_BANDS.map(b =>
     `<a class="hero-band" href="#band=${encodeURIComponent(b.slug)}" title="${esc(b.name)}">
-      <img src="${esc(b.image)}" alt="${esc(b.name)}" width="400" height="400" loading="lazy">
+      ${imgTag(b.image, b.name, 'width="360" height="360" loading="lazy" decoding="async"')}
       <span>${esc(b.name)}</span>
     </a>`
   ).join('');
   // price cards
   $('#priceCards').innerHTML = CATS.slice(1).map(c => {
     const p = PRODUCTS.find(x => x.category === c.id); const cnt = PRODUCTS.filter(x => x.category === c.id).length;
-    return `<a class="price-card" href="#catalog" data-goto-cat="${c.id}"><img src="${esc(p.image)}" alt=""><div><span class="muted">${c.one}</span><b>${money(catPrice(c.id))}</b><span class="muted">${cnt} дизайнов · за ${c.id==='earrings'?'комплект':'шт'}</span></div></a>`;
+    return `<a class="price-card" href="#catalog" data-goto-cat="${c.id}">${imgTag(p.image, '', 'loading="lazy"')}<div><span class="muted">${c.one}</span><b>${money(catPrice(c.id))}</b><span class="muted">${cnt} дизайнов · за ${c.id==='earrings'?'комплект':'шт'}</span></div></a>`;
   }).join('');
   $$('[data-goto-cat]').forEach(a => a.addEventListener('click', () => { activeCat = a.dataset.gotoCat; renderTabs(); renderGrid(); }));
   $('#tiersHome').innerHTML = CFG.tiers.map((t,i) => {
@@ -263,6 +266,16 @@ function filtered(){
     && (!activeBand || bandSlugOf(p) === activeBand)
     && (!onlyStock || available(p) > 0)
     && (!q || p.name.toLowerCase().replace(/ё/g,'е').includes(q) || bandNameOf(p).toLowerCase().replace(/ё/g,'е').includes(q)));
+}
+// Сортировка: default — порядок каталога; stock — сначала в наличии (больше доступно → выше), под заказ/всё в брони — в конце; alpha — А–Я по группе, затем по названию
+const COLL = new Intl.Collator('ru', {sensitivity:'base', numeric:true});
+const PROD_ORDER = Object.fromEntries(PRODUCTS.map((p, i) => [p.id, i]));
+function sorted(list){
+  const byDefault = (a, b) => PROD_ORDER[a.id] - PROD_ORDER[b.id];
+  const byAlpha = (a, b) => COLL.compare(bandSortKey(bandNameOf(a)), bandSortKey(bandNameOf(b))) || COLL.compare(a.name, b.name) || byDefault(a, b);
+  if (sortMode === 'stock') return list.slice().sort((a, b) => (available(b) > 0) - (available(a) > 0) || available(b) - available(a) || byAlpha(a, b));
+  if (sortMode === 'alpha') return list.slice().sort(byAlpha);
+  return list;
 }
 function catalogTitle(){
   const el = $('#catalogTitle'); if (!el) return;
@@ -342,7 +355,7 @@ function cardHTML(p){
   const q = inCart ? cart[p.id] : (pending[p.id] ?? (isRetail() ? 1 : 50));
   const st = qStep(), quick = isRetail() ? [1,5,10] : [50,100,500];
   return `<article class="item ${inCart?'in-cart':''}" data-id="${p.id}">
-    <div class="ph" data-zoom="${p.id}"><img src="${esc(p.image)}" alt="${esc(p.name)}" loading="lazy">${stockBadge(p)}</div>
+    <div class="ph" data-zoom="${p.id}">${imgTag(p.image, p.name, 'loading="lazy" decoding="async" width="360" height="360"')}${stockBadge(p)}</div>
     <div class="body">
       <span class="cat">${esc(CATS.find(c=>c.id===p.category).one)}</span>
       <span class="name">${esc(p.name)}</span>
@@ -358,7 +371,7 @@ function cardHTML(p){
     </div></article>`;
 }
 function renderGrid(){
-  const list = filtered();
+  const list = sorted(filtered());
   $('#grid').innerHTML = list.map(cardHTML).join('');
   const empty = $('#gridEmpty');
   empty.hidden = list.length > 0;
@@ -394,12 +407,14 @@ function bindGrid(){
   });
   $('#tabs').addEventListener('click', e => { const b = e.target.closest('[data-cat]'); if (!b) return; activeCat = b.dataset.cat; renderTabs(); renderGrid(); });
   $('#onlyStock').addEventListener('change', e => { onlyStock = e.target.checked; renderGrid(); });
+  const ss = $('#sortSel'); if (ss) { ss.value = sortMode;
+    ss.addEventListener('change', e => { sortMode = e.target.value; try { localStorage.setItem('merch_sort', sortMode); } catch(_){} renderGrid(); }); }
   let t; $('#search').addEventListener('input', e => { clearTimeout(t); t = setTimeout(() => { query = e.target.value; renderGrid(); }, 120); });
   $('#gridEmpty').addEventListener('click', e => { const b = e.target.closest('[data-band]'); if (b) setBand(b.dataset.band || ''); });
 }
 function zoom(p){
   const d = document.createElement('div'); d.className = 'lightbox';
-  d.innerHTML = `<div><img src="${esc(p.image)}" alt=""><div>${esc(p.name)} · ${esc(CATS.find(c=>c.id===p.category).one)}</div></div>`;
+  d.innerHTML = `<div>${imgTag(p.image, '')}<div>${esc(p.name)} · ${esc(CATS.find(c=>c.id===p.category).one)}</div></div>`;
   d.onclick = () => d.remove(); document.body.appendChild(d);
 }
 
@@ -433,7 +448,7 @@ function refreshCart(){
   $('#miniProgress').innerHTML = progressHTML(c) ;
   $('#cartItems').innerHTML = c.lines.length ? c.lines.map(l => `
     <div class="line" data-id="${l.p.id}">
-      <img src="${esc(l.p.image)}" alt="">
+      ${imgTag(l.p.image, '', 'loading="lazy"')}
       <div><div class="ln-name">${esc(l.p.name)}</div><div class="ln-meta">${esc(CATS.find(x=>x.id===l.p.category).one)} · ${money(l.unitPrice)}${c.disc?` <s>${money(l.base)}</s>`:''} / ${unitWord(l.p)}</div><div class="ln-meta"><b>${money(l.sum)}</b></div><div class="ln-stock"><span class="stock ${stockSplit(l.p,l.qty).toOrder?'order':'in'}">${esc(lineStockText(l.p,l.qty))}</span></div></div>
       <div class="ln-right"><div class="stepper"><button data-cstep="-10">−</button><input type="number" min="0" value="${l.qty}" data-cqty><button data-cstep="10">+</button></div><button class="rm" data-crm>Удалить</button></div>
     </div>`).join('') : `<p class="empty">Заявка пуста.<br><a href="#catalog" data-close>Перейти в каталог</a></p>`;
