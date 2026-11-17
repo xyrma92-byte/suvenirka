@@ -27,7 +27,8 @@ const CONF = {
 };
 const ss = () => SpreadsheetApp.getActive();
 const sh = n => ss().getSheetByName(n);
-const fmt = d => Utilities.formatDate(new Date(d), ss().getSpreadsheetTimeZone(), 'dd.MM.yyyy HH:mm');
+const TZ = () => { let z = ''; try { z = ss().getSpreadsheetTimeZone(); } catch (e) {} if (!z) { try { z = Session.getScriptTimeZone(); } catch (e) {} } return z || 'Europe/Moscow'; };
+const fmt = d => Utilities.formatDate(new Date(d), TZ(), 'dd.MM.yyyy HH:mm');
 function headIdx(s){ const h = s.getRange(1, 1, 1, s.getLastColumn()).getValues()[0]; const m = {}; h.forEach((k, i) => m[String(k).trim()] = i); return m; }
 function stockSheet(cat){ for (const n of CONF.STOCK_TABS[cat] || []) { const s = sh(n); if (s && s.getLastRow() > 1) return s; } return null; }
 
@@ -65,7 +66,7 @@ function setup(){
   ScriptApp.newTrigger('expireReservations').timeBased().everyHours(1).create();
 }
 
-const SCRIPT_VERSION = '2026-11-17.3';
+const SCRIPT_VERSION = '2026-11-17.4';
 const LOG_TAB = 'Лог', LOG_HEAD = ['Время', 'Событие', 'Заказ', 'Сообщение', 'Подробности'];
 
 // ---------- Надёжная запись: без appendRow/getLastRow ----------
