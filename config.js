@@ -16,7 +16,7 @@ window.SITE_CONFIG = {
   // Подпись описывает только то, что видно на кадре. Сейчас фото упаковки нет.
   fittingsPhotos: [
     { src: "images/fittings/kish-ring-chain.webp", caption: "Кольцо, цепочка и обратная сторона", alt: "Брелок Король и Шут: металлическое кольцо, цепочка и вид обратной стороны" },
-    { src: "images/fittings/soad-ring-chain.webp", caption: "Кольцо, цепочка и обратная сторона", alt: "Брелок System of a Down: металлическое кольцо, цепочка и вид обратной стороны" },
+    { src: "images/fittings/anime-gojo.webp", caption: "Аниме-брелок: кольцо и цепочка", alt: "Брелок с Сатору Годжо («Магическая битва»): металлическое кольцо и цепочка" },
     { src: "images/fittings/earrings-hooks.webp", caption: "Крючки-рыбки", alt: "Серьги на серебристых крючках-рыбках" },
     { src: "images/fittings/buyer-photo-ozon.webp", caption: "Фото покупателя с Ozon", alt: "Живое фото брелока из отзыва покупателя на Ozon" }
   ],
@@ -48,6 +48,24 @@ window.SITE_CONFIG = {
   reservationsCsvUrl: "",
   // URL веб-приложения Google Apps Script (tools/apps-script/Code.gs). Если задан — заявки сразу пишутся в «Заказы»/«Бронь»
   appsScriptUrl: "https://script.google.com/macros/s/AKfycbyVU_P-LuBRC8REX1ZmrTXOCrVpk4bYqFGHOKj5qD4fRafWtAW7nvQsTXxS_I7OXNbO3A/exec",
+
+
+  // ===== Доставка =====
+  // Модель: клиент оплачивает только заказ. После оплаты сотрудник отвозит посылку со склада в г. Павловск
+  // и оформляет отправку «оплата получателем» — доставку получатель оплачивает при получении по тарифу службы.
+  shipFrom: "г. Павловск (Санкт-Петербург)",
+  deliveryNotice: "Доставка не входит в счёт — оплачивается получателем при получении по тарифу службы. Отправка из г. Павловск после оплаты заказа; трек-номер пришлём на почту/в мессенджер.",
+  // kind: pvz — нужен адрес пункта выдачи; courier — адрес до двери; post — адрес + индекс; pickup — без адреса
+  deliveryServices: [
+    { id: "cdek_pvz",     name: "СДЭК — пункт выдачи",         short: "СДЭК (ПВЗ)",      kind: "pvz",     mapUrl: "https://www.cdek.ru/ru/offices", mapLabel: "Карта пунктов СДЭК", hint: "Пункты почти в каждом городе, хранение до 7 дней" },
+    { id: "cdek_courier", name: "СДЭК — курьер до двери",      short: "СДЭК (курьер)",   kind: "courier", mapUrl: "https://www.cdek.ru/ru/offices", mapLabel: "Сайт СДЭК", hint: "Курьер привезёт по адресу, доставку оплачиваете курьеру" },
+    { id: "post",         name: "Почта России",                 short: "Почта России",    kind: "post",    mapUrl: "https://www.pochta.ru/offices",  mapLabel: "Найти отделение и индекс", hint: "Удобно для малых городов и дальних регионов" },
+    { id: "yandex_pvz",   name: "Яндекс Доставка — пункт выдачи", short: "Яндекс (ПВЗ)", kind: "pvz",     mapUrl: "https://dostavka.yandex.ru/pickup-point/", mapLabel: "Карта пунктов Яндекса", hint: "Пункты Яндекс Маркета и 5Post («Пятёрочка»)" },
+    { id: "pickup",       name: "Самовывоз — г. Павловск",      short: "Самовывоз",       kind: "pickup",  hint: "По договорённости — время и адрес согласуем в мессенджере" }
+  ],
+
+  // ===== Документы (152-ФЗ) =====
+  legalDocs: { privacy: "privacy.html", consent: "consent.html", terms: "terms.html", version: "2026-11-17" },
 
   // ===== Способы оплаты и реквизиты для счетов =====
   // markupRate — надбавка к стоимости товаров в счёте и в итоге корзины при выбранном способе оплаты

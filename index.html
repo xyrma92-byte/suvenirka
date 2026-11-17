@@ -4,7 +4,27 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Рок-мерч — брелоки, значки, магниты, серьги оптом и в розницу | Производство в России</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E%E2%98%85%3C/text%3E%3C/svg%3E">
+<meta name="description" content="Брелоки, магниты, значки и серьги с рок-группами: оптом от 500 шт со скидками до −15% и поштучно от 1 шт. Свой дизайн под любую тематику. Производство в России.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="icon" href="favicon-32.png" type="image/png" sizes="32x32">
+<link rel="apple-touch-icon" href="apple-touch-icon.png" sizes="180x180">
+<link rel="canonical" href="https://xyrma92-byte.github.io/suvenirka/">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="ru_RU">
+<meta property="og:site_name" content="Сувенирка">
+<meta property="og:url" content="https://xyrma92-byte.github.io/suvenirka/">
+<meta property="og:title" content="Сувенирка — рок-мерч оптом и поштучно">
+<meta property="og:description" content="Брелоки, магниты, значки и серьги с рок-группами: оптом от 500 шт со скидками до −15% и поштучно от 1 шт. Свой дизайн под любую тематику. Производство в России.">
+<meta property="og:image" content="https://xyrma92-byte.github.io/suvenirka/images/og/og-a.jpg">
+<meta property="og:image:secure_url" content="https://xyrma92-byte.github.io/suvenirka/images/og/og-a.jpg">
+<meta property="og:image:type" content="image/jpeg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Сувенирка — рок-мерч: брелоки, магниты, значки и серьги оптом и поштучно">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Сувенирка — рок-мерч оптом и поштучно">
+<meta name="twitter:description" content="Брелоки, магниты, значки и серьги с рок-группами: оптом от 500 шт со скидками до −15% и поштучно от 1 шт. Свой дизайн под любую тематику. Производство в России.">
+<meta name="twitter:image" content="https://xyrma92-byte.github.io/suvenirka/images/og/og-a.jpg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@600;700;800;900&family=Manrope:wght@400;500;600;700;800&display=swap&subset=cyrillic" rel="stylesheet">
@@ -18,12 +38,12 @@
     <a href="#home" data-nav="home">Главная</a>
     <a href="#catalog" data-nav="catalog">Каталог</a>
     <a href="#custom" data-nav="custom">Индивидуальный дизайн</a>
-    <a href="#history" data-nav="history">Мои заявки</a>
+    <a href="#history" data-nav="history">Мои заказы</a>
   </nav>
   <div class="contact-btns contact-btns-header" id="headerContacts"></div>
   <button class="mode-btn" id="modeBtn" type="button" title="Сменить режим">Режим: <b id="modeLabel">—</b> ⇄</button>
   <button class="cart-btn" id="cartBtn" aria-label="Корзина">
-    🛒 <span class="cart-btn-label">Заявка</span> <b id="cartCount">0</b><small id="cartCountUnit">шт</small>
+    🛒 <span class="cart-btn-label">Корзина</span> <b id="cartCount">0</b><small id="cartCountUnit">шт</small>
   </button>
 </header>
 
@@ -91,7 +111,7 @@
   <div data-only="wholesale"><h2 class="section-title">Скидки от суммарного тиража</h2>
   <div class="tiers" id="tiersHome"></div></div>
 
-  <h2 class="section-title">Как оформить заявку</h2>
+  <h2 class="section-title">Как оформить заказ</h2>
   <ol class="steps">
     <li><b>Выберите позиции</b> в каталоге и укажите количество.</li>
     <li data-only="wholesale"><b>Наберите от 500 шт</b> суммарно — скидка считается автоматически.</li>
@@ -144,7 +164,7 @@
 
 <!-- ===== CHECKOUT ===== -->
 <section class="view" id="view-checkout" hidden>
-  <h1>Оформление заявки</h1>
+  <h1>Оформление заказа</h1>
   <div class="checkout-layout">
     <form id="orderForm" class="card form" novalidate>
       <h3>Контактные данные</h3>
@@ -152,7 +172,6 @@
       <label>Телефон *<input name="phone" type="tel" required autocomplete="tel" placeholder="+7 900 000-00-00"></label>
       <label>Email *<input name="email" type="email" required autocomplete="email"></label>
       <label>Компания / магазин<input name="company" autocomplete="organization"></label>
-      <label>Город доставки<input name="city"></label>
       <fieldset class="pay-fieldset">
         <legend>Способ оплаты *</legend>
         <div class="pay-options" id="payOptions"></div>
@@ -161,10 +180,31 @@
         <label>ИНН покупателя<input name="payerInn" inputmode="numeric" placeholder="Для счёта на организацию / ИП"></label>
         <label>Реквизиты покупателя<input name="payerReq" placeholder="Полное название, КПП, юр. адрес"></label>
       </div>
-      <label>Комментарий<textarea name="comment" rows="3" placeholder="Сроки, доставка, пожелания"></textarea></label>
-      <label class="check"><input type="checkbox" name="consent" required> Согласен(на) на обработку персональных данных для связи по заявке</label>
+      <fieldset class="delivery-fieldset" id="deliveryFieldset">
+        <legend>Доставка *</legend>
+        <div class="delivery-notice" id="deliveryNotice"></div>
+        <div class="pay-options delivery-options" id="deliveryOptions"></div>
+        <div class="delivery-fields" id="deliveryFields" hidden>
+          <div class="delivery-map" id="deliveryMap"></div>
+          <label data-dlv="city">Город / населённый пункт *<input name="dlvCity" autocomplete="address-level2" placeholder="Например: Екатеринбург"></label>
+          <label data-dlv="address"><span id="dlvAddressLabel">Адрес пункта выдачи *</span><input name="dlvAddress" autocomplete="street-address" placeholder=""></label>
+          <label data-dlv="index">Индекс *<input name="dlvIndex" inputmode="numeric" maxlength="6" placeholder="6 цифр" autocomplete="postal-code"></label>
+          <div class="form-row2">
+            <label data-dlv="recipient">ФИО получателя *<input name="dlvName" autocomplete="name" placeholder="Как в паспорте — для выдачи посылки"></label>
+            <label data-dlv="recipient">Телефон получателя *<input name="dlvPhone" type="tel" autocomplete="tel" placeholder="+7 900 000-00-00"></label>
+          </div>
+          <label>Комментарий к доставке<input name="dlvComment" placeholder="Например: код домофона, удобное время"></label>
+        </div>
+      </fieldset>
+      <label>Комментарий к заказу<textarea name="comment" rows="3" placeholder="Сроки, пожелания"></textarea></label>
+      <div class="consents">
+        <label class="check"><input type="checkbox" name="consentPd" required data-consent> <span>Даю <a href="consent.html" target="_blank" rel="noopener">согласие на обработку персональных данных</a> * <small class="muted">(<a href="privacy.html" target="_blank" rel="noopener">политика обработки ПД</a>)</small></span></label>
+        <label class="check"><input type="checkbox" name="consentTerms" required data-consent> <span>С <a href="terms.html" target="_blank" rel="noopener">условиями оплаты, доставки и возврата</a> ознакомлен(а) *</span></label>
+        <label class="check"><input type="checkbox" name="consentAds"> <span>Согласен(на) получать новости и акции <small class="muted">(необязательно)</small></span></label>
+      </div>
       <div class="form-error" id="orderError"></div>
-      <button class="btn primary big" type="submit" id="orderSubmit">Отправить заявку и получить счёт</button>
+      <button class="btn primary big" type="submit" id="orderSubmit">Оформить заказ и получить счёт</button>
+      <small class="hint submit-hint" id="submitHint"></small>
       <a href="#catalog" class="btn ghost">← Вернуться в каталог</a>
     </form>
     <div class="card" id="checkoutSummary"></div>
@@ -221,7 +261,7 @@
         <label>Email *<input name="email" type="email" required autocomplete="email"></label>
         <label>Компания / магазин<input name="company" autocomplete="organization"></label>
         <label>Желаемый срок<input name="deadline" placeholder="Например: к 1 декабря"></label>
-        <label class="check"><input type="checkbox" name="consent" required> Согласен(на) на обработку персональных данных для связи по заявке</label>
+        <label class="check"><input type="checkbox" name="consent" required> <span>Даю <a href="consent.html" target="_blank" rel="noopener">согласие на обработку персональных данных</a> для связи по заявке *</span></label>
         <div class="form-error" id="customError"></div>
         <button class="btn primary big" type="submit" id="customSubmit">✉ Отправить заявку на почту</button>
         <small class="hint">После отправки откроется письмо на <b class="emailTo"></b> с готовым текстом заявки — приложите к нему свои файлы.</small>
@@ -237,8 +277,8 @@
 
 <!-- ===== HISTORY ===== -->
 <section class="view" id="view-history" hidden>
-  <h1>Мои заявки</h1>
-  <p class="muted">Заявки хранятся только в этом браузере.</p>
+  <h1>Мои заказы</h1>
+  <p class="muted">Заказы и заявки на дизайн хранятся только в этом браузере.</p>
   <div id="historyList"></div>
 </section>
 </main>
@@ -247,7 +287,7 @@
 <div class="overlay" id="overlay" hidden></div>
 <aside class="drawer" id="drawer" aria-hidden="true">
   <div class="drawer-head">
-    <h2>Ваша заявка</h2>
+    <h2>Корзина</h2>
     <button class="icon-btn" id="drawerClose" aria-label="Закрыть">✕</button>
   </div>
   <div class="drawer-body" id="cartItems"></div>
@@ -257,6 +297,8 @@
 <footer class="footer">
   <div><b id="footCompany"></b><span id="footPerson"></span> · Производство в России</div>
   <div id="footContacts"></div>
+  <nav class="footer-legal"><a href="privacy.html">Политика обработки персональных данных</a><a href="consent.html">Согласие на обработку ПД</a><a href="terms.html">Условия оплаты, доставки и возврата</a></nav>
+  <div class="footer-req muted">ИП Таран Никита Сергеевич · ИНН 780731585813 · ОГРНИП 318784700302999</div>
 </footer>
 
 <div class="toast" id="toast"></div>

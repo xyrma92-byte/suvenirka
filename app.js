@@ -367,7 +367,7 @@ function cardHTML(p){
       <div class="actions">
         <div class="stepper"><button type="button" data-step="-${st}" aria-label="Меньше">−</button><input type="number" min="0" step="${st}" value="${q}" data-qty aria-label="Количество"><button type="button" data-step="${st}" aria-label="Больше">+</button></div>
         <div class="quick">${quick.map(n => `<button type="button" data-plus="${n}">+${n}</button>`).join('')}</div>
-        ${inCart ? `<button class="btn add" data-remove>✓ В заявке · убрать</button>` : `<button class="btn primary add" data-add>В заявку</button>`}
+        ${inCart ? `<button class="btn add" data-remove>✓ В корзине · убрать</button>` : `<button class="btn primary add" data-add>В корзину</button>`}
       </div>
     </div></article>`;
 }
@@ -398,7 +398,7 @@ function bindGrid(){
     if (e.target.closest('[data-zoom]')) return zoom(p);
     if (e.target.dataset.step) apply(cur + Number(e.target.dataset.step));
     else if (e.target.dataset.plus) apply(cur + Number(e.target.dataset.plus) - (inCart || pending[id] !== undefined ? 0 : cur));
-    else if (e.target.hasAttribute('data-add')) { if (cur <= 0) { toast('Укажите количество'); return; } setQty(id, cur); delete pending[id]; toast(`«${p.name}» — ${num(cur)} ${unitWord(p)} в заявке`); }
+    else if (e.target.hasAttribute('data-add')) { if (cur <= 0) { toast('Укажите количество'); return; } setQty(id, cur); delete pending[id]; toast(`«${p.name}» — ${num(cur)} ${unitWord(p)} в корзине`); }
     else if (e.target.hasAttribute('data-remove')) { setQty(id, 0); }
   });
   grid.addEventListener('change', e => {
@@ -491,10 +491,11 @@ function refreshCart(){
       ${imgTag(l.p.image, '', 'loading="lazy"')}
       <div><div class="ln-name">${esc(l.p.name)}</div><div class="ln-meta">${esc(CATS.find(x=>x.id===l.p.category).one)} · ${money(l.unitPrice)}${c.disc?` <s>${money(l.base)}</s>`:''} / ${unitWord(l.p)}</div><div class="ln-meta"><b>${money(l.sum)}</b></div><div class="ln-stock"><span class="stock ${stockSplit(l.p,l.qty).toOrder?'order':'in'}">${esc(lineStockText(l.p,l.qty))}</span></div></div>
       <div class="ln-right"><div class="stepper"><button data-cstep="-10">−</button><input type="number" min="0" value="${l.qty}" data-cqty><button data-cstep="10">+</button></div><button class="rm" data-crm>Удалить</button></div>
-    </div>`).join('') : `<p class="empty">Заявка пуста.<br><a href="#catalog" data-close>Перейти в каталог</a></p>`;
+    </div>`).join('') : `<p class="empty">Корзина пуста.<br><a href="#catalog" data-close>Перейти в каталог</a></p>`;
   $('#cartFoot').innerHTML = progressHTML(c) + totalsHTML(c) +
     (c.lines.length && !c.meetsMin ? `<div class="warn">Минимальный заказ — ${num(minQty())} шт суммарно (можно миксом). Добавьте ещё ${num(minQty() - c.totalQty)} шт.</div>` : '') +
-    `<button class="btn primary big" id="toCheckout" ${c.meetsMin?'':'disabled'}>Оформить заявку</button>` +
+    (c.lines.length ? `<div class="hint-box dlv-box">🚚 ${esc(DLV_NOTICE)}</div>` : '') +
+    `<button class="btn primary big" id="toCheckout" ${c.meetsMin?'':'disabled'}>Оформить заказ</button>` +
     (c.lines.length ? `<button class="btn ghost" id="clearCart">Очистить</button>` : '');
   if (location.hash === '#checkout') renderCheckoutSummary();
 }
@@ -504,7 +505,7 @@ function bindCart(){
   $('#drawer').addEventListener('click', e => {
     if (e.target.closest('[data-close]')) return closeDrawer();
     if (e.target.id === 'toCheckout') { closeDrawer(); location.hash = '#checkout'; return; }
-    if (e.target.id === 'clearCart') { if (confirm('Очистить заявку?')) { const ids = Object.keys(cart); cart = {}; save(LS_CART, cart); refreshCart(); ids.forEach(refreshCard); } return; }
+    if (e.target.id === 'clearCart') { if (confirm('Очистить корзину?')) { const ids = Object.keys(cart); cart = {}; save(LS_CART, cart); refreshCart(); ids.forEach(refreshCard); } return; }
     const line = e.target.closest('.line'); if (!line) return; const id = line.dataset.id;
     if (e.target.dataset.cstep) setQty(id, (cart[id]||0) + Number(e.target.dataset.cstep) * qStep() / 10);
     if (e.target.hasAttribute('data-crm')) setQty(id, 0);
@@ -513,6 +514,60 @@ function bindCart(){
 }
 function openDrawer(){ $('#drawer').classList.add('open'); $('#overlay').hidden = false; $('#drawer').setAttribute('aria-hidden','false'); }
 function closeDrawer(){ $('#drawer').classList.remove('open'); $('#overlay').hidden = true; $('#drawer').setAttribute('aria-hidden','true'); }
+
+// ---------- delivery / consents ----------
+const DLV = CFG.deliveryServices || [];
+const DLV_BY = Object.fromEntries(DLV.map(d => [d.id, d]));
+const DLV_NOTICE = CFG.deliveryNotice || 'Доставка не входит в счёт — оплачивается получателем при получении по тарифу службы.';
+const selectedDlv = () => { const i = $('#orderForm input[name=delivery]:checked'); return i ? DLV_BY[i.value] || null : null; };
+const ADDR_LABEL = {pvz:'Адрес пункта выдачи *', courier:'Адрес для курьера (улица, дом, квартира) *', post:'Адрес получения: улица, дом, кв. или «до востребования» *'};
+const ADDR_PH = {pvz:'Скопируйте адрес выбранного пункта с карты', courier:'ул. Ленина, д. 1, кв. 10', post:'ул. Ленина, д. 1, кв. 10'};
+function renderDeliveryOptions(){
+  $('#deliveryNotice').innerHTML = `🚚 <b>Доставка оплачивается отдельно.</b> ${esc(DLV_NOTICE)}`;
+  $('#deliveryOptions').innerHTML = DLV.map(d => `<label class="pay-opt dlv-opt"><input type="radio" name="delivery" value="${esc(d.id)}" required>
+    <span><b>${esc(d.name)}</b><small>${esc(d.hint || '')}</small>${d.kind !== 'pickup' ? '<em>оплата доставки — получателем</em>' : ''}</span></label>`).join('');
+}
+function updateDeliveryFields(){
+  const d = selectedDlv(), f = $('#orderForm'), box = $('#deliveryFields');
+  box.hidden = !d;
+  const k = d ? d.kind : '';
+  const show = (key, on) => $$(`[data-dlv="${key}"]`, box).forEach(l => { l.hidden = !on; const i = $('input', l); i.required = !!d && on; if (!on) i.classList.remove('invalid'); });
+  show('city', k && k !== 'pickup'); show('address', k && k !== 'pickup'); show('index', k === 'post'); show('recipient', !!k);
+  if (!d) return;
+  if (k !== 'pickup'){ $('#dlvAddressLabel').textContent = ADDR_LABEL[k] || 'Адрес *'; f.elements.dlvAddress.placeholder = ADDR_PH[k] || ''; }
+  $('#deliveryMap').innerHTML = d.mapUrl
+    ? `<a class="btn map-btn" href="${esc(d.mapUrl)}" target="_blank" rel="noopener noreferrer">🗺 ${esc(d.mapLabel || 'Карта пунктов')}</a><span class="muted">${k === 'courier' ? 'Укажите адрес, куда привезти посылку.' : k === 'post' ? 'Найдите отделение и его индекс на карте Почты.' : 'Выберите удобный пункт на карте и вставьте его адрес ниже.'}</span>`
+    : `<span class="muted">📍 Склад: ${esc(CFG.shipFrom || 'г. Павловск')}. Время и адрес выдачи согласуем в мессенджере после оплаты.</span>`;
+  prefillRecipient();
+}
+function prefillRecipient(){
+  const f = $('#orderForm');
+  [['dlvName','name'],['dlvPhone','phone']].forEach(([to, from]) => { const t = f.elements[to]; if (!t.dataset.touched) t.value = f.elements[from].value; });
+}
+function deliveryOf(f){
+  const d = selectedDlv(); if (!d) return null;
+  const v = n => (f.elements[n] && f.elements[n].value || '').trim();
+  const pick = d.kind === 'pickup';
+  return {serviceId:d.id, service:d.name, kind:d.kind, city: pick ? 'Павловск' : v('dlvCity'), address: pick ? 'самовывоз со склада (по договорённости)' : v('dlvAddress'),
+    postIndex: d.kind === 'post' ? v('dlvIndex') : '', recipientName:v('dlvName'), recipientPhone:v('dlvPhone'), comment:v('dlvComment'),
+    payer: pick ? 'самовывоз' : 'получатель — при получении, по тарифу службы', shipFrom: CFG.shipFrom || 'г. Павловск', trackNumber:''};
+}
+function deliveryText(dl){
+  if (!dl) return '';
+  return [dl.service, [dl.postIndex, dl.city, dl.address].filter(Boolean).join(', '), `получатель: ${dl.recipientName}, ${dl.recipientPhone}`,
+    dl.comment && `комментарий: ${dl.comment}`, dl.kind !== 'pickup' && 'доставку оплачивает получатель'].filter(Boolean).join('; ');
+}
+function consentText(cs){
+  if (!cs) return '';
+  return `Согласия: ПД — ${cs.personalData ? 'да' : 'нет'}, условия — ${cs.terms ? 'да' : 'нет'}, рассылка — ${cs.marketing ? 'да' : 'нет'} (${fmtDT(cs.acceptedAt)}, ред. ${cs.docsVersion})`;
+}
+const consentsOk = () => $$('#orderForm [data-consent]').every(i => i.checked);
+function updateSubmitState(c){
+  c = c || calc(cart, selectedPm());
+  const ok = consentsOk();
+  $('#orderSubmit').disabled = !c.meetsMin || !ok;
+  $('#submitHint').textContent = c.meetsMin && !ok ? 'Отметьте обязательные согласия (*), чтобы оформить заказ.' : '';
+}
 
 // ---------- checkout ----------
 function summaryTable(lines){
@@ -537,18 +592,23 @@ function renderPaymentOptions(){
   $('#payOptions').innerHTML = Object.values(PM).map(m => `<label class="pay-opt"><input type="radio" name="payment" value="${m.id}" required>
     <span><b>${esc(m.label)}</b><small>${esc(m.legalName)}</small><em>${esc(m.hint || '')}</em></span></label>`).join('');
 }
+function deliverySummaryHTML(){
+  const d = selectedDlv();
+  return `<div class="hint-box dlv-box">🚚 ${d ? `Доставка: <b>${esc(d.name)}</b>. ` : '<b>Выберите способ доставки.</b> '}${esc(DLV_NOTICE)}</div>`;
+}
 function renderCheckoutSummary(){
   const pmId = selectedPm();
   const c = calc(cart, pmId);
   $$('.payer-legal').forEach(e => e.hidden = !(pmId === 'ooo' || pmId === 'ip'));
-  $('#checkoutSummary').innerHTML = `<h3>Состав заявки</h3>` + (c.lines.length ? summaryTable(orderLines(c)) : '<p class="muted">Заявка пуста.</p>') +
+  $('#checkoutSummary').innerHTML = `<h3>Состав заказа</h3>` + (c.lines.length ? summaryTable(orderLines(c)) : '<p class="muted">Корзина пуста.</p>') +
     progressHTML(c) + '<br>' + totalsHTML(c) +
     (!pmId ? `<div class="hint-box">Выберите способ оплаты — итог пересчитается, после отправки сразу сформируется счёт.</div>` : '') +
     (c.lines.some(l => stockSplit(l.p, l.qty).inStock) ? `<div class="hint-box">🔒 Позиции из наличия будут забронированы на ${CFG.reservationDays||1} день — до ${ddmm(reservationUntil())} включительно. Если оплата не поступит, бронь снимается.</div>` : '') +
     (!c.meetsMin ? `<br><div class="warn">Нельзя отправить: минимальный заказ ${num(minQty())} шт, сейчас ${num(c.totalQty)} шт. <a href="#catalog">Добавить позиции</a></div>` : '') +
+    deliverySummaryHTML() +
     `<p><button class="btn ghost" type="button" id="editCart">Изменить состав</button></p>`;
   $('#editCart').onclick = openDrawer;
-  $('#orderSubmit').disabled = !c.meetsMin;
+  updateSubmitState(c);
 }
 function validate(form, errBox, extra){
   let ok = true, missing = false; const errs = [];
@@ -578,26 +638,67 @@ function nextInvoiceNo(d = new Date()){
   const st = load(LS_INVSEQ, {}); const n = (st.day === day ? st.n : 0) + 1; save(LS_INVSEQ, {day, n});
   return `${day}-${String(n).padStart(3,'0')}${Math.random().toString(36).slice(2,4).toUpperCase()}`;
 }
+// Старый (уже развёрнутый) Code.gs пишет o.comment в колонку «Комментарий» — кладём туда читаемую сводку доставки и согласий
+function sheetComment(o){
+  return [o.comment, o.delivery && 'ДОСТАВКА: ' + deliveryText(o.delivery), consentText(o.consents)].filter(Boolean).join(' | ');
+}
 function pushToSheet(o){
   if (!CFG.appsScriptUrl) return;
-  try { fetch(CFG.appsScriptUrl, {method:'POST', mode:'no-cors', headers:{'Content-Type':'text/plain;charset=utf-8'}, body: JSON.stringify({action:'order', order:{...o, items:o.items.map(({image, ...x}) => x)}, invoiceHtml: invoiceHTML(o)})}); }
-  catch(e){ console.warn('Apps Script', e); }
+  let body = '';
+  try { body = JSON.stringify({action:'order', order:{...o, customerComment:o.comment || '', comment:sheetComment(o), items:o.items.map(({image, ...x}) => x)}, invoiceHtml: invoiceHTML(o)}); }
+  catch(e){ console.warn('Apps Script payload', e); return; }
+  // 1) основной канал — fetch (text/plain, no-cors)
+  try { fetch(CFG.appsScriptUrl, {method:'POST', mode:'no-cors', headers:{'Content-Type':'text/plain;charset=utf-8'}, body}).catch(err => console.warn('Apps Script fetch', err)); }
+  catch(e){ console.warn('Apps Script fetch', e); }
+  // 2) резервный канал — обычная HTML-форма с полем payload в скрытый iframe (не зависит от fetch/CORS/блокировщиков).
+  //    Скрипт пропускает повтор по номеру заказа, так что двойной записи не будет.
+  setTimeout(() => {
+    try {
+      const name = 'gsSink' + Date.now();
+      const fr = document.createElement('iframe'); fr.name = name; fr.hidden = true; fr.setAttribute('aria-hidden', 'true'); fr.tabIndex = -1;
+      const fm = document.createElement('form'); fm.method = 'POST'; fm.action = CFG.appsScriptUrl; fm.target = name; fm.hidden = true; fm.acceptCharset = 'UTF-8';
+      const inp = document.createElement('input'); inp.type = 'hidden'; inp.name = 'payload'; inp.value = body; fm.appendChild(inp);
+      document.body.append(fr, fm); fm.submit();
+      setTimeout(() => { fr.remove(); fm.remove(); }, 60000);
+    } catch(e){ console.warn('Apps Script form', e); }
+  }, 1500);
 }
 function bindOrderForm(){
   const f = $('#orderForm');
-  renderPaymentOptions();
-  f.addEventListener('change', e => { if (e.target.name === 'payment') { renderCheckoutSummary(); refreshCart(); } });
+  renderPaymentOptions(); renderDeliveryOptions(); updateDeliveryFields();
+  f.addEventListener('change', e => {
+    if (e.target.name === 'payment') { renderCheckoutSummary(); refreshCart(); }
+    if (e.target.name === 'delivery') { updateDeliveryFields(); renderCheckoutSummary(); }
+    if (e.target.hasAttribute('data-consent')) updateSubmitState();
+  });
+  f.addEventListener('input', e => {
+    if (e.target.name === 'dlvName' || e.target.name === 'dlvPhone') e.target.dataset.touched = e.target.value ? '1' : '';
+    if (e.target.name === 'name' || e.target.name === 'phone') prefillRecipient();
+  });
   f.addEventListener('submit', e => {
     e.preventDefault();
     const pmId = selectedPm();
     const c = calc(cart, pmId);
-    if (!validate(f, $('#orderError'), () => !c.meetsMin ? `Минимальный заказ ${minQty()} шт — сейчас ${c.totalQty} шт` : (!pmId ? 'Выберите способ оплаты' : ''))) return;
+    const dSel = selectedDlv();
+    if (!validate(f, $('#orderError'), () => {
+      if (!c.meetsMin) return `Минимальный заказ ${minQty()} шт — сейчас ${c.totalQty} шт`;
+      if (!pmId) return 'Выберите способ оплаты';
+      if (!dSel) return 'Выберите способ доставки';
+      if (dSel.kind === 'post' && !/^\d{6}$/.test(f.elements.dlvIndex.value.trim())) { f.elements.dlvIndex.classList.add('invalid'); return 'Индекс — 6 цифр'; }
+      if (f.elements.dlvPhone.value.replace(/\D/g,'').length < 10) { f.elements.dlvPhone.classList.add('invalid'); return 'Проверьте телефон получателя'; }
+      if (!consentsOk()) return 'Отметьте обязательные согласия';
+      return '';
+    })) return;
+    const delivery = deliveryOf(f);
     const now = new Date(), until = reservationUntil(now), pm = PM[pmId];
     const items = orderLines(c);
     const order = {type:'catalog', typeName:'Заказ из каталога', id:newId('ZK'), createdAt:now.toISOString(),
       mode, modeName: MODE_NAME[mode],
-      contact:{...contactOf(f), city:f.elements.city.value.trim(), inn:(f.elements.payerInn?.value||'').trim(), requisites:(f.elements.payerReq?.value||'').trim()},
+      contact:{...contactOf(f), city:delivery.city, inn:(f.elements.payerInn?.value||'').trim(), requisites:(f.elements.payerReq?.value||'').trim()},
       comment:f.elements.comment.value.trim(),
+      delivery,
+      consents:{personalData:f.elements.consentPd.checked, terms:f.elements.consentTerms.checked, marketing:f.elements.consentAds.checked,
+        acceptedAt:now.toISOString(), docsVersion:(CFG.legalDocs || {}).version || '', docs:['consent.html','privacy.html','terms.html']},
       payment:{id:pm.id, label:pm.label, legalName:pm.legalName, markupRate:c.markupRate, markupLabel:pm.markupLabel||''},
       invoice:{number:nextInvoiceNo(now), date:now.toISOString(), payUntil:until.toISOString()},
       items, totals:{totalQty:c.totalQty, discountPercent:c.disc, subtotal:c.subtotal, discount:c.discountSum, total:c.total,
@@ -613,7 +714,8 @@ function bindOrderForm(){
     addHistory(order);
     pushToSheet(order);
     const w = openInvoice(order); // печатная форма счёта открывается автоматически
-    cart = {}; save(LS_CART, cart); refreshCart(); renderGrid(); f.reset(); renderCheckoutSummary();
+    cart = {}; save(LS_CART, cart); refreshCart(); renderGrid(); f.reset();
+    $$('[data-touched]', f).forEach(i => delete i.dataset.touched); updateDeliveryFields(); renderCheckoutSummary();
     showSuccess(order, !w);
   });
 }
@@ -711,7 +813,7 @@ function invoiceHTML(o){
   .parties td{border:0;padding:3px 0}.parties td:first-child{width:110px;color:#333}
   .items th{background:#eee}.r{text-align:right;white-space:nowrap}.c{text-align:center}
   .tot{width:auto;margin-left:auto;margin-top:6px}.tot td{border:0;text-align:right;padding:2px 6px}.tot .b td{font-weight:bold;font-size:14px}
-  .small{font-size:12px;color:#333}.box{border:2px solid #000;padding:8px 10px;margin:14px 0;font-weight:bold}
+  .small{font-size:12px;color:#333}.box{border:2px solid #000;padding:8px 10px;margin:14px 0;font-weight:bold}.box.dlv{border-style:dashed;font-weight:normal}
   .sign{margin-top:30px;display:flex;gap:40px}.sign div{flex:1;border-bottom:1px solid #000;padding-bottom:18px}
   .tools{margin:0 0 14px;display:flex;gap:8px}.tools button{padding:8px 14px;font-size:14px;cursor:pointer}
   @media print{.tools{display:none} body{margin:0}}
@@ -721,12 +823,14 @@ function invoiceHTML(o){
   <h1>Счёт на оплату № ${e(o.invoice.number)} от ${fmtDate(o.invoice.date)}</h1>
   <table class="parties"><tr><td>Поставщик:</td><td><b>${supplier}</b></td></tr>
   <tr><td>Покупатель:</td><td><b>${buyer}</b></td></tr>
-  <tr><td>Основание:</td><td>Заявка № ${e(o.id)} (${e(o.modeName || '')}), способ оплаты: ${e(pm.label)}</td></tr></table>
+  <tr><td>Основание:</td><td>Заказ № ${e(o.id)} (${e(o.modeName || '')}), способ оплаты: ${e(pm.label)}</td></tr>
+  ${o.delivery ? `<tr><td>Доставка:</td><td>${e(deliveryText(o.delivery))}</td></tr>` : ''}</table>
   <table class="items" style="margin-top:10px"><thead><tr><th>№</th><th>Товар</th><th>Кол-во</th><th>Ед.</th><th>Цена, ₽</th><th>Сумма, ₽</th></tr></thead><tbody>${rows}</tbody></table>
   <table class="tot">${totals}</table>
   ${discount}
   <p>Всего наименований ${o.items.length}, на сумму ${m2(t.grand)} руб.<br><b>${rubWords(t.grand)}</b>${pm.id === 'ooo' ? `, в т.ч. НДС ${Math.round((pm.vatRate||0.22)*100)}%` : (pm.id === 'ip' ? ', НДС не облагается' : '')}</p>
   <div class="box">Счёт действителен до ${fmtDate(o.invoice.payUntil)} включительно.${resLines.length ? ` Товар из наличия (${num(resLines.reduce((a,l)=>a+l.qty,0))} шт) забронирован до ${fmtDate(o.reservation.expiresAt)}; если оплата не поступит, бронь снимается.` : ''}</div>
+  ${o.delivery ? `<div class="box dlv">🚚 ${e(DLV_NOTICE)}${o.delivery.kind === 'pickup' ? ' Выбран самовывоз из г. Павловск — время согласуем.' : ''}</div>` : ''}
   <p class="small">В назначении платежа укажите: «Оплата по счёту № ${e(o.invoice.number)}». Позиции «под заказ» изготавливаются ${e(CFG.madeToOrderLead)} после оплаты.</p>
   <p class="small">Контакты: тел./Telegram/WhatsApp ${e(CFG.phone || '')}${CFG.email ? ', email ' + e(CFG.email) : ''}</p>
   ${isCard ? '' : `<div class="sign"><div>${pm.id === 'ip' ? 'Индивидуальный предприниматель' : 'Руководитель'}</div><div>${pm.id === 'ip' ? 'Таран Н. С.' : 'Бухгалтер'}</div></div>`}
@@ -755,10 +859,12 @@ const csvCell = v => { v = typeof v === 'number' ? String(v).replace('.', ',') :
 function toCSV(o){
   const rows = [];
   const kv = (k,v) => rows.push([k, v]);
-  kv('Заявка', o.id); kv('Тип', o.typeName); kv('Дата', new Date(o.createdAt).toLocaleString('ru-RU'));
+  kv(o.type === 'custom' ? 'Заявка' : 'Заказ', o.id); kv('Тип', o.typeName); kv('Дата', new Date(o.createdAt).toLocaleString('ru-RU'));
   kv('Имя', o.contact.name); kv('Телефон', o.contact.phone); kv('Email', o.contact.email); kv('Компания', o.contact.company);
   if (o.type === 'catalog'){
     kv('Город', o.contact.city); kv('Комментарий', o.comment);
+    if (o.delivery){ const d = o.delivery; kv('Доставка', d.service); kv('Город доставки', d.city); kv('Адрес / ПВЗ', d.address); kv('Индекс', d.postIndex); kv('Получатель', d.recipientName); kv('Телефон получателя', d.recipientPhone); kv('Комментарий к доставке', d.comment); kv('Оплата доставки', d.payer); kv('Трек-номер', ''); }
+    if (o.consents) kv('Согласия', consentText(o.consents));
     if (o.payment){ kv('Режим', o.modeName); kv('Способ оплаты', o.payment.label); kv('Получатель', o.payment.legalName); kv('Счёт №', o.invoice.number); kv('Бронь до', new Date(o.reservation.expiresAt).toLocaleString('ru-RU')); if (o.contact.inn) kv('ИНН покупателя', o.contact.inn); }
     rows.push([]);
     rows.push(['Артикул','Наименование','Тип','Ед.','Кол-во','Наличие','Из наличия','Под заказ','Цена базовая, ₽','Цена со скидкой, ₽','Сумма, ₽']);
@@ -772,11 +878,12 @@ function toCSV(o){
   return '\ufeff' + rows.map(r => r.map(csvCell).join(';')).join('\r\n');
 }
 function mailBody(o){
-  const L = [`Заявка ${o.id} — ${o.typeName}`, `Дата: ${new Date(o.createdAt).toLocaleString('ru-RU')}`, '',
+  const L = [`${o.type === 'custom' ? 'Заявка' : 'Заказ'} ${o.id} — ${o.typeName}`, `Дата: ${new Date(o.createdAt).toLocaleString('ru-RU')}`, '',
     `Имя: ${o.contact.name}`, `Телефон: ${o.contact.phone}`, `Email: ${o.contact.email}`, o.contact.company ? `Компания: ${o.contact.company}` : '', ''];
   if (o.type === 'catalog'){
     if (o.contact.city) L.push(`Город: ${o.contact.city}`);
     if (o.comment) L.push(`Комментарий: ${o.comment}`);
+    if (o.delivery) L.push(`Доставка: ${deliveryText(o.delivery)}`, DLV_NOTICE);
     L.push('Состав:');
     let added = 0;
     for (const i of o.items){ const s = `- ${i.name} (${i.categoryName}) — ${i.qty} × ${i.unitPrice} ₽ = ${i.sum} ₽ [${i.availability||''}]`; if ((L.join('\n')+s).length > 1400){ L.push(`…и ещё ${o.items.length - added} поз. (полный список — в приложенном файле)`); break; } L.push(s); added++; }
@@ -796,11 +903,12 @@ function mailBody(o){
   return L.filter((x,i,a) => x !== '' || a[i-1] !== '').join('\n');
 }
 function mailto(o){
-  return `mailto:${encodeURIComponent(CFG.email||'')}?subject=${encodeURIComponent(`Заявка ${o.id}: ${o.typeName}` + (o.invoice ? ` · счёт № ${o.invoice.number} · ${o.payment.label}` : ''))}&body=${encodeURIComponent(mailBody(o))}`;
+  return `mailto:${encodeURIComponent(CFG.email||'')}?subject=${encodeURIComponent(`${o.type === 'custom' ? 'Заявка' : 'Заказ'} ${o.id}: ${o.typeName}` + (o.invoice ? ` · счёт № ${o.invoice.number} · ${o.payment.label}` : ''))}&body=${encodeURIComponent(mailBody(o))}`;
 }
 function orderDetailsHTML(o){
   if (o.type === 'catalog') return summaryTable(o.items) + `<div class="totals"><span>Всего изделий</span><span>${num(o.totals.totalQty)} шт</span><span>Без скидки</span><span>${money(o.totals.subtotal)}</span>${o.totals.discountPercent ? `<span class="disc">Скидка ${o.totals.discountPercent}%</span><span class="disc">−${money(o.totals.discount)}</span>` : ''}${o.totals.markup ? `<span>Товары</span><span>${money(o.totals.total)}</span><span class="markup">${esc(o.payment.markupLabel)}</span><span class="markup">+${money(o.totals.markup)}</span>` : ''}<span class="grand">К оплате</span><span class="grand">${money(o.totals.grand ?? o.totals.total)}</span></div>` +
-    (o.payment ? `<div class="by-cat">${esc(o.modeName||'')} · оплата: <b>${esc(o.payment.label)}</b> (${esc(o.payment.legalName)}) · счёт № ${esc(o.invoice.number)}${o.reservation.lines.length ? ` · бронь ${num(o.reservation.lines.reduce((a,l)=>a+l.qty,0))} шт до ${ddmm(o.reservation.expiresAt)}` : ''}</div>` : '');
+    (o.payment ? `<div class="by-cat">${esc(o.modeName||'')} · оплата: <b>${esc(o.payment.label)}</b> (${esc(o.payment.legalName)}) · счёт № ${esc(o.invoice.number)}${o.reservation.lines.length ? ` · бронь ${num(o.reservation.lines.reduce((a,l)=>a+l.qty,0))} шт до ${ddmm(o.reservation.expiresAt)}` : ''}</div>` : '') +
+    (o.delivery ? `<div class="hint-box dlv-box">🚚 ${esc(deliveryText(o.delivery))}<br>${esc(DLV_NOTICE)}</div>` : '');
   return `<table class="sum-table"><tbody>
     <tr><td>Тематика</td><td>${esc(o.theme)}</td></tr><tr><td>Описание</td><td>${esc(o.description)}</td></tr>
     <tr><td>Изделия</td><td>${esc(o.productTypes.join(', '))}</td></tr><tr><td>Разработка дизайна</td><td>${o.designs} × ${money(o.designFee)} = <b>${money(o.designTotal)}</b></td></tr><tr><td>Тираж</td><td>${o.approxQty ? num(o.approxQty)+' шт' : '—'}</td></tr>
@@ -809,25 +917,30 @@ function orderDetailsHTML(o){
   </tbody></table>`;
 }
 let lastOrder = null;
+// Служебные кнопки (JSON / CSV / строки «Бронь») — только без Apps Script или по ссылке ?admin=1
+const IS_ADMIN = /[?&]admin=1(&|$)/.test(location.search);
+const showInternalTools = () => IS_ADMIN || !CFG.appsScriptUrl;
 function showSuccess(o, popupBlocked){
   lastOrder = o;
   const inv = o.invoice ? `<div class="invoice-box"><div><b>🧾 Счёт № ${esc(o.invoice.number)}</b> · ${esc(o.payment.label)} · к оплате <b>${money(o.totals.grand)}</b></div>
     <div class="muted">Счёт ${popupBlocked ? 'готов — откройте его кнопкой ниже' : 'открыт в новой вкладке'}. Оплатите до <b>${fmtDate(o.invoice.payUntil)}</b> включительно${o.reservation.lines.length ? ` — до этого времени товар из наличия (${num(o.reservation.lines.reduce((a,l)=>a+l.qty,0))} шт) забронирован за вами` : ''}. После этого бронь снимается.</div>
     <div class="actions"><button class="btn primary" data-inv="open">🧾 Открыть счёт / печать</button><button class="btn" data-inv="dl">⬇ Скачать счёт (HTML)</button></div></div>` : '';
-  $('#successBox').innerHTML = `<div class="big-ok">✅</div><h1>Заявка принята</h1>
-    <p class="lead" style="margin:0 auto">Номер заявки <b>${esc(o.id)}</b>. ${esc(o.contact.name)}, мы свяжемся с вами по телефону ${esc(o.contact.phone)} или почте ${esc(o.contact.email)}.</p>
+  const internal = showInternalTools();
+  const isCat = o.type !== 'custom';
+  $('#successBox').innerHTML = `<div class="big-ok">✅</div><h1>${isCat ? 'Заказ принят' : 'Заявка на дизайн принята'}</h1>
+    <p class="lead" style="margin:0 auto">${isCat ? 'Номер заказа' : 'Номер заявки'} <b>${esc(o.id)}</b>. ${esc(o.contact.name)}, мы свяжемся с вами по телефону ${esc(o.contact.phone)} или почте ${esc(o.contact.email)}.</p>
     <p class="muted success-contacts-label">Написать нам сейчас:</p>
     ${contactButtonsHTML('success')}
-    <p class="muted">${o.type==='custom' ? `Сейчас откроется письмо на ${esc(CFG.email||'нашу почту')} — <b>приложите к нему свои варианты дизайна</b> и отправьте. Если письмо не открылось, нажмите «Отправить письмом».` : `Скачайте файл заявки и отправьте его нам на почту${CFG.email ? ' ' + esc(CFG.email) : ''} — или нажмите «Отправить письмом».`}</p>
+    <p class="muted">${o.type==='custom' ? `Сейчас откроется письмо на ${esc(CFG.email||'нашу почту')} — <b>приложите к нему свои варианты дизайна</b> и отправьте. Если письмо не открылось, нажмите «Отправить письмом».` : (internal ? `Скачайте файл заказа и отправьте его нам на почту${CFG.email ? ' ' + esc(CFG.email) : ''} — или нажмите «Отправить письмом».` : `Счёт продублируем на почту ${esc(o.contact.email)}. После оплаты отправим заказ и пришлём трек-номер. Вопросы — пишите в Telegram или WhatsApp.`)}</p>
     ${inv}
     <div class="actions">
-      <button class="btn primary" data-dl="json">⬇ Скачать JSON</button>
-      <button class="btn primary" data-dl="csv">⬇ Скачать CSV (Excel)</button>
+      ${internal ? `<button class="btn primary" data-dl="json">⬇ Скачать JSON</button>
+      <button class="btn primary" data-dl="csv">⬇ Скачать CSV (Excel)</button>` : ''}
       <a class="btn" href="${esc(mailto(o))}">✉ Отправить письмом</a>
-      ${o.reservation && o.reservation.lines.length ? '<button class="btn ghost" data-dl="sheet">⬇ Строки для вкладки «Бронь»</button>' : ''}
+      ${internal && o.reservation && o.reservation.lines.length ? '<button class="btn ghost" data-dl="sheet">⬇ Строки для вкладки «Бронь»</button>' : ''}
     </div>
     ${orderDetailsHTML(o)}
-    <div class="actions"><a class="btn ghost" href="#catalog">В каталог</a><a class="btn ghost" href="#history">Мои заявки</a></div>`;
+    <div class="actions"><a class="btn ghost" href="#catalog">В каталог</a><a class="btn ghost" href="#history">Мои заказы</a></div>`;
   location.hash = '#success';
   window.scrollTo(0,0);
 }
@@ -856,7 +969,7 @@ function addHistory(o){
 function renderHistory(){
   const h = load(LS_HIST, []);
   $('#historyList').innerHTML = h.length ? h.map(o => `<details class="card hist"><summary class="hist-head"><b>${esc(o.id)}</b><span>${esc(o.typeName)}</span><span class="muted">${new Date(o.createdAt).toLocaleString('ru-RU')}</span><span>${o.type==='catalog' ? num(o.totals.totalQty)+' шт · '+money(o.totals.grand ?? o.totals.total) + (o.payment ? ' · ' + esc(o.payment.label) : '') : esc(o.theme)}</span></summary>
-    <div style="margin-top:12px">${orderDetailsHTML(o)}<div class="actions" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><button class="btn" data-dl="json" data-oid="${esc(o.id)}">⬇ JSON</button><button class="btn" data-dl="csv" data-oid="${esc(o.id)}">⬇ CSV</button><a class="btn" href="${esc(mailto(o))}">✉ Письмом</a>${o.invoice ? `<button class="btn" data-inv="open" data-oid="${esc(o.id)}">🧾 Счёт</button>` : ''}</div></div></details>`).join('')
+    <div style="margin-top:12px">${orderDetailsHTML(o)}<div class="actions" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">${showInternalTools() ? `<button class="btn" data-dl="json" data-oid="${esc(o.id)}">⬇ JSON</button><button class="btn" data-dl="csv" data-oid="${esc(o.id)}">⬇ CSV</button>` : ''}<a class="btn" href="${esc(mailto(o))}">✉ Письмом</a>${o.invoice ? `<button class="btn" data-inv="open" data-oid="${esc(o.id)}">🧾 Счёт</button>` : ''}</div></div></details>`).join('')
     : '<p class="empty">Пока нет заявок. <a href="#catalog">Перейти в каталог</a></p>';
 }
 

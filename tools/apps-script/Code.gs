@@ -8,6 +8,8 @@
  *  • onOrderEdit — менеджер ставит в «Заказы» статус «оплачен» → списывается «Количество» на вкладке «Склад …» (один раз).
  *    «снята» → бронь освобождается.
  *  • expireReservations — каждый час: просроченные «бронь» → «истекла», товар снова к продаже (склад не меняется).
+ *  • Доставка и согласия (152-ФЗ): в «Заказы» дописываются колонки EXTRA_COLS справа от существующих (старые не сдвигаются).
+ *    Заголовки создаются сами (setup() или первый заказ). «Трек-номер» заполняет сотрудник после отправки.
  */
 const CONF = {
   ORDERS: 'Заказы', RES: 'Бронь',
@@ -16,7 +18,12 @@ const CONF = {
     magnets: ['Склад магниты (копия)', 'Склад магниты'], earrings: ['Склад серьги  (копия)', 'Склад серьги ', 'Склад серьги']
   },
   SEND_INVOICE_EMAIL: true,          // отправлять клиенту счёт письмом
-  SELLER_EMAIL: 'iptns@mail.ru'      // копия каждого счёта
+  SELLER_EMAIL: 'iptns@mail.ru',     // копия каждого счёта
+  BASE_COLS: 16,                     // первые 16 колонок «Заказы» — как раньше (заявка … комментарий)
+  // Новые колонки «Заказы» — добавляются в конец, если их ещё нет
+  EXTRA_COLS: ['Служба доставки', 'Город доставки', 'Адрес / ПВЗ', 'Индекс', 'Получатель', 'Телефон получателя',
+    'Комментарий к доставке', 'Оплата доставки', 'Трек-номер', 'Согласие на обработку ПД', 'Согласие с условиями',
+    'Согласие на рассылку', 'Дата и время согласий', 'Версия документов']
 };
 const ss = () => SpreadsheetApp.getActive();
 const sh = n => ss().getSheetByName(n);
@@ -24,32 +31,103 @@ const fmt = d => Utilities.formatDate(new Date(d), ss().getSpreadsheetTimeZone()
 function headIdx(s){ const h = s.getRange(1, 1, 1, s.getLastColumn()).getValues()[0]; const m = {}; h.forEach((k, i) => m[String(k).trim()] = i); return m; }
 function stockSheet(cat){ for (const n of CONF.STOCK_TABS[cat] || []) { const s = sh(n); if (s && s.getLastRow() > 1) return s; } return null; }
 
+function ensureOrderColumns(){
+  const ord = sh(CONF.ORDERS), last = Math.max(ord.getLastColumn(), CONF.BASE_COLS);
+  const head = ord.getRange(1, 1, 1, last).getValues()[0].map(x => String(x).trim());
+  const missing = CONF.EXTRA_COLS.filter(c => head.indexOf(c) === -1);
+  if (missing.length) ord.getRange(1, last + 1, 1, missing.length).setValues([missing]).setFontWeight('bold');
+  return headIdx(ord);
+}
+function extraValues(o){
+  const d = o.delivery || {}, c = o.consents || {}, yn = v => v ? 'да' : 'нет';
+  return {
+    'Служба доставки': d.service || '', 'Город доставки': d.city || '', 'Адрес / ПВЗ': d.address || '', 'Индекс': d.postIndex || '',
+    'Получатель': d.recipientName || '', 'Телефон получателя': d.recipientPhone || '', 'Комментарий к доставке': d.comment || '',
+    'Оплата доставки': d.payer || '', 'Трек-номер': '',
+    'Согласие на обработку ПД': o.consents ? yn(c.personalData) : '', 'Согласие с условиями': o.consents ? yn(c.terms) : '',
+    'Согласие на рассылку': o.consents ? yn(c.marketing) : '', 'Дата и время согласий': c.acceptedAt ? fmt(c.acceptedAt) : '',
+    'Версия документов': c.docsVersion || ''
+  };
+}
+function deliveryHtml(o){
+  const d = o.delivery; if (!d) return '';
+  const e = v => String(v == null ? '' : v).replace(/[&<>"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]));
+  return '<div style="font:14px Arial,sans-serif;border:2px dashed #e0a100;padding:10px 12px;margin:0 0 16px;max-width:800px">' +
+    '<b>Доставка:</b> ' + e(d.service) + '<br>' + e([d.postIndex, d.city, d.address].filter(String).join(', ')) +
+    '<br>Получатель: ' + e(d.recipientName) + ', ' + e(d.recipientPhone) + (d.comment ? '<br>Комментарий: ' + e(d.comment) : '') +
+    '<br><i>Доставка не входит в счёт — оплачивается получателем при получении по тарифу службы. Отправка из г. Павловск после оплаты заказа; трек-номер пришлём на почту/в мессенджер.</i></div>';
+}
+
 function setup(){
+  ensureOrderColumns();
   ScriptApp.getProjectTriggers().forEach(t => ScriptApp.deleteTrigger(t));
   ScriptApp.newTrigger('onOrderEdit').forSpreadsheet(ss()).onEdit().create();
   ScriptApp.newTrigger('expireReservations').timeBased().everyHours(1).create();
 }
 
-function doPost(e){
-  const lock = LockService.getScriptLock(); lock.waitLock(20000);
+const SCRIPT_VERSION = '2026-11-17.2';
+// Журнал входящих заявок и ошибок — вкладка «Лог» (создаётся сама)
+function logRow(kind, id, msg, extra){
   try {
-    const data = JSON.parse(e.postData.contents), o = data.order;
-    const ord = sh(CONF.ORDERS), ids = ord.getRange(2, 1, Math.max(1, ord.getLastRow() - 1), 1).getValues().flat();
-    if (ids.indexOf(o.id) === -1) {
-      ord.appendRow([o.id, fmt(o.createdAt), o.modeName, o.payment.label, o.invoice.number, o.contact.name, o.contact.phone, o.contact.email, o.contact.company,
-        o.totals.total, o.totals.markup || 0, o.totals.grand, fmt(o.reservation.expiresAt), 'бронь', '', o.comment || '']);
-      const res = sh(CONF.RES);
-      o.reservation.lines.forEach(l => res.appendRow([o.id, fmt(o.createdAt), fmt(o.reservation.expiresAt), l.productId, l.productName, l.category, l.qty,
-        'бронь', o.payment.label, o.contact.company || o.contact.name, (l.stockRows || []).join(' | '), '']));
-      if (CONF.SEND_INVOICE_EMAIL && data.invoiceHtml && o.contact.email) {
-        MailApp.sendEmail({to: o.contact.email, cc: CONF.SELLER_EMAIL, subject: `Счёт № ${o.invoice.number} — ${o.payment.label}`, htmlBody: data.invoiceHtml});
-      }
+    let s = sh('Лог');
+    if (!s) { s = ss().insertSheet('Лог'); s.appendRow(['Время', 'Событие', 'Заказ', 'Сообщение', 'Подробности']); s.setFrozenRows(1); }
+    s.appendRow([fmt(new Date()), kind, id || '', String(msg || '').slice(0, 1000), String(extra || '').slice(0, 2000)]);
+  } catch (err) { console.error('logRow', err); }
+}
+// Заявка приходит либо JSON-телом (fetch, text/plain), либо полем формы payload (резервная отправка)
+function parsePayload(e){
+  const p = (e && e.parameter) || {};
+  if (p.payload) return JSON.parse(p.payload);
+  const raw = e && e.postData && e.postData.contents;
+  if (!raw) throw new Error('пустой запрос');
+  try { return JSON.parse(raw); }
+  catch (err) { const m = String(raw).match(/(?:^|&)payload=([^&]*)/); if (m) return JSON.parse(decodeURIComponent(m[1].replace(/\+/g, ' '))); throw err; }
+}
+const jsonOut = obj => ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
+
+function doPost(e){
+  let id = '', lock = null;
+  try {
+    const data = parsePayload(e), o = data.order || {};
+    id = o.id || '';
+    if (!id) throw new Error('нет order.id');
+    const pay = o.payment || {}, inv = o.invoice || {}, ct = o.contact || {}, tt = o.totals || {}, rs = o.reservation || {}, lines = rs.lines || [];
+    const created = o.createdAt || new Date().toISOString(), until = rs.expiresAt || created;
+    lock = LockService.getScriptLock(); lock.waitLock(20000);
+    const ord = sh(CONF.ORDERS); if (!ord) throw new Error('нет вкладки «' + CONF.ORDERS + '»');
+    const res = sh(CONF.RES); if (!res) throw new Error('нет вкладки «' + CONF.RES + '»');
+    const ids = ord.getLastRow() > 1 ? ord.getRange(2, 1, ord.getLastRow() - 1, 1).getValues().flat().map(String) : [];
+    if (ids.indexOf(String(id)) !== -1) { logRow('повтор', id, 'заказ уже записан — пропущен'); return jsonOut({ok: true, duplicate: true, version: SCRIPT_VERSION}); }
+    let h = {};
+    try { h = ensureOrderColumns(); } catch (err) { logRow('ошибка колонок', id, err); }
+    const width = Math.max(ord.getLastColumn(), CONF.BASE_COLS);
+    const row = [id, fmt(created), o.modeName || '', pay.label || '', inv.number || '', ct.name || '', ct.phone || '', ct.email || '', ct.company || '',
+      tt.total || 0, tt.markup || 0, tt.grand || tt.total || 0, fmt(until), 'бронь', '',
+      o.customerComment != null ? o.customerComment : (o.comment || '')];
+    while (row.length < width) row.push('');
+    try { const ex = extraValues(o); Object.keys(ex).forEach(k => { if (h[k] != null && h[k] >= CONF.BASE_COLS) row[h[k]] = ex[k]; }); }
+    catch (err) { logRow('ошибка доставки/согласий', id, err); }
+    ord.appendRow(row);
+    lines.forEach(l => res.appendRow([id, fmt(created), fmt(until), l.productId || '', l.productName || '', l.category || '', Number(l.qty) || 0,
+      'бронь', pay.label || '', ct.company || ct.name || '', (l.stockRows || []).join(' | '), '']));
+    lock.releaseLock(); lock = null;
+    logRow('заказ', id, 'записан: ' + lines.length + ' строк брони', (o.delivery && o.delivery.service) || '');
+    if (CONF.SEND_INVOICE_EMAIL && data.invoiceHtml && ct.email) {
+      try {
+        const body = String(data.invoiceHtml).replace(/<body[^>]*>/i, m => m + deliveryHtml(o));
+        MailApp.sendEmail({to: ct.email, cc: CONF.SELLER_EMAIL, subject: `Счёт № ${inv.number || id} — ${pay.label || ''}`, htmlBody: body});
+      } catch (err) { logRow('ошибка письма', id, err, err && err.stack); }
     }
-    return ContentService.createTextOutput(JSON.stringify({ok: true})).setMimeType(ContentService.MimeType.JSON);
-  } finally { lock.releaseLock(); }
+    return jsonOut({ok: true, version: SCRIPT_VERSION});
+  } catch (err) {
+    logRow('ОШИБКА', id, err, (err && err.stack || '') + ' | ' + String(e && e.postData && e.postData.contents || '').slice(0, 500));
+    return jsonOut({ok: false, error: String(err), version: SCRIPT_VERSION});
+  } finally { if (lock) try { lock.releaseLock(); } catch (x) {} }
 }
 
 function doGet(e){
+  const action = e && e.parameter && e.parameter.action;
+  if (action === 'version') return jsonOut({ok: true, version: SCRIPT_VERSION, sheet: ss().getName(), tabs: [CONF.ORDERS, CONF.RES].map(n => n + (sh(n) ? ': есть' : ': НЕТ'))});
   const res = sh(CONF.RES), h = headIdx(res), now = new Date();
   const rows = res.getLastRow() > 1 ? res.getRange(2, 1, res.getLastRow() - 1, res.getLastColumn()).getValues() : [];
   const out = rows.filter(r => String(r[h.status]).trim().toLowerCase() === 'бронь' && parseDate(r[h.expiresAt]) > now)

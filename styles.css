@@ -468,3 +468,30 @@ a{color:var(--accent2)}
   .fittings-card img{border-radius:10px}
   .fittings-card span{font-size:12px;padding:6px 2px 2px}
 }
+/* ===== delivery + consents + legal ===== */
+.delivery-fieldset{border:1px solid var(--line);border-radius:12px;margin:4px 0 14px;padding:12px 14px;display:flex;flex-direction:column;gap:10px}
+.delivery-fieldset legend{font-weight:700;padding:0 6px}
+.delivery-notice{background:linear-gradient(90deg,rgba(255,77,90,.14),rgba(255,176,46,.10));border:1px solid rgba(255,176,46,.45);color:#ffe2b8;border-radius:10px;padding:10px 12px;font-size:14px}
+.delivery-options .pay-opt em{color:var(--accent2)}
+.delivery-fields{display:flex;flex-direction:column;gap:2px;border-top:1px dashed var(--line);padding-top:10px}
+.delivery-map{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;font-size:13px;margin-bottom:8px}
+.btn.map-btn{padding:8px 14px;font-size:14px;border-color:var(--accent2);color:var(--accent2);background:transparent}
+.form-row2{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}
+@media (max-width:640px){.form-row2{grid-template-columns:1fr}}
+.dlv-box{border-color:rgba(255,176,46,.45)!important;color:#ffd9a3!important}
+.consents{display:flex;flex-direction:column;gap:2px;margin:6px 0 4px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--bg2)}
+.consents label.check{font-size:14px;margin:4px 0}
+.consents a{color:var(--accent2)}
+.submit-hint{display:block;text-align:center;color:var(--accent2);margin-top:6px;min-height:1em}
+.footer-legal{display:flex;flex-wrap:wrap;justify-content:center;gap:6px 18px;margin-top:12px;font-size:13px}
+.footer-legal a{color:var(--muted)}
+.footer-legal a:hover{color:var(--accent2)}
+.footer-req{font-size:12px}
+.doc{max-width:860px;margin:0 auto;padding:24px 24px 60px}
+.doc h1{font-size:clamp(24px,3.4vw,34px)}
+.doc h2{font-size:19px;margin:28px 0 8px;color:var(--accent2)}
+.doc p,.doc li{color:#d3d7e0;font-size:15px}
+.doc .doc-meta{color:var(--muted);font-size:14px}
+.doc table{border-collapse:collapse;width:100%;margin:8px 0}
+.doc td{border:1px solid var(--line);padding:8px 10px;vertical-align:top;font-size:14px}
+.doc-nav{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 18px}
