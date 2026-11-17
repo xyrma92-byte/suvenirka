@@ -18,7 +18,11 @@ const CONF = {
     magnets: ['Склад магниты (копия)', 'Склад магниты'], earrings: ['Склад серьги  (копия)', 'Склад серьги ', 'Склад серьги']
   },
   SEND_INVOICE_EMAIL: true,          // отправлять клиенту счёт письмом
-  SELLER_EMAIL: 'iptns@mail.ru',     // копия каждого счёта
+  SELLER_EMAIL: 'iptns@mail.ru',     // сюда всегда уходит отдельное письмо «Новый заказ» (+ Reply-To писем клиенту)
+  SHOP_NAME: 'Сувенирка',            // имя отправителя
+  PHONE: '8 (964) 342-69-67',        // как в config.js
+  TELEGRAM: 'https://t.me/+79643426967',
+  WHATSAPP: 'https://wa.me/79643426967',
   BASE_COLS: 16,                     // первые 16 колонок «Заказы» — как раньше (заявка … комментарий)
   // Новые колонки «Заказы» — добавляются в конец, если их ещё нет
   EXTRA_COLS: ['Служба доставки', 'Город доставки', 'Адрес / ПВЗ', 'Индекс', 'Получатель', 'Телефон получателя',
@@ -66,7 +70,7 @@ function setup(){
   ScriptApp.newTrigger('expireReservations').timeBased().everyHours(1).create();
 }
 
-const SCRIPT_VERSION = '2026-11-17.4';
+const SCRIPT_VERSION = '2026-11-17.5';
 const LOG_TAB = 'Лог', LOG_HEAD = ['Время', 'Событие', 'Заказ', 'Сообщение', 'Подробности'];
 
 // ---------- Надёжная запись: без appendRow/getLastRow ----------
@@ -128,6 +132,104 @@ function parsePayload(e){
 }
 const jsonOut = obj => ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 
+// ---------- Письма: клиенту — короткий текст + счёт PDF во вложении; продавцу — всегда отдельное письмо ----------
+const escH = v => String(v == null ? '' : v).replace(/[&<>"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]));
+// без toLocaleString: в Apps Script Intl для ru-RU ненадёжен
+const rub = n => { const v = Math.round(Number(n || 0) * 100) / 100, [i, f] = Math.abs(v).toFixed(2).split('.');
+  return (v < 0 ? '−' : '') + i.replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + (f === '00' ? '' : ',' + f) + ' ₽'; };
+function invoicePdf(data, o, id){
+  if (!data.invoiceHtml) return null;
+  const inv = o.invoice || {};
+  // без кнопки «Печать» и скриптов — это файл, а не страница
+  const html = String(data.invoiceHtml)
+    .replace(/<div class="tools">[\s\S]*?<\/div>/i, '')
+    .replace(/<script[\s\S]*?<\/script>/gi, '');
+  const name = 'Счёт_' + String(inv.number || id).replace(/[\\/:*?"<>|\s]+/g, '_') + '.pdf';
+  return Utilities.newBlob(html, 'text/html', 'invoice.html').getAs('application/pdf').setName(name);
+}
+function deliveryLine(o){
+  const d = o.delivery; if (!d) return '';
+  const addr = [d.postIndex, d.city, d.address].filter(x => String(x || '').trim()).join(', ');
+  return [d.service, addr].filter(Boolean).join(' — ');
+}
+function itemsList(o){
+  return (o.items || []).map(i => (i.name || '') + (i.categoryName ? ' (' + i.categoryName + ')' : '') + ' — ' + (Number(i.qty) || 0) + ' ' + (i.unit === 'комплект' ? 'компл.' : 'шт') + (i.sum != null ? ', ' + rub(i.sum) : ''));
+}
+function customerMail(o, id){
+  const inv = o.invoice || {}, ct = o.contact || {}, tt = o.totals || {}, rs = o.reservation || {}, d = o.delivery || null;
+  const num = inv.number || id, sum = rub(tt.grand || tt.total), until = rs.expiresAt ? fmt(rs.expiresAt) : '';
+  const hello = 'Добрый день' + (ct.name ? ', ' + ct.name : '') + '!';
+  const pickup = d && /самовывоз/i.test(String(d.payer || '') + ' ' + String(d.service || ''));
+  const dlv = !d ? '' : pickup ? 'Получение: ' + deliveryLine(o) + '.'
+    : 'Доставка: ' + deliveryLine(o) + '. Доставка оплачивается получателем при получении по тарифу службы, отправка из г. Павловск после оплаты заказа; трек-номер пришлём.';
+  const items = itemsList(o);
+  const subject = 'Ваш заказ № ' + id + ' — счёт № ' + num;
+  const text = [hello, '',
+    'Вы оформили заказ № ' + id + ' на сумму ' + sum + '. Счёт № ' + num + ' во вложении (PDF).',
+    until ? 'Товар забронирован до ' + until + ' — оплатите, пожалуйста, до этого времени.' : '',
+    dlv, '', items.length ? 'Состав заказа:\n' + items.map(x => '• ' + x).join('\n') : '', '',
+    'После оплаты, пожалуйста, пришлите чек (квитанцию / платёжку) любым удобным способом: ответом на это письмо, в Telegram (' + CONF.TELEGRAM + ') или в WhatsApp (' + CONF.WHATSAPP + ').',
+    '', 'Спасибо за заказ!', CONF.SHOP_NAME + ', тел. ' + CONF.PHONE].filter((x, i, a) => x !== '' || a[i - 1] !== '').join('\n');
+  const a = (href, t) => '<a href="' + escH(href) + '">' + escH(t) + '</a>';
+  const html = '<div style="font:15px/1.5 Arial,Helvetica,sans-serif;color:#111;max-width:640px">' +
+    '<p>' + escH(hello) + '</p>' +
+    '<p>Вы оформили заказ <b>№ ' + escH(id) + '</b> на сумму <b>' + escH(sum) + '</b>. Счёт № ' + escH(num) + ' — во вложении (PDF).</p>' +
+    (until ? '<p>Товар забронирован до <b>' + escH(until) + '</b> — оплатите, пожалуйста, до этого времени.</p>' : '') +
+    (dlv ? '<p>' + escH(dlv) + '</p>' : '') +
+    (items.length ? '<p style="margin-bottom:4px"><b>Состав заказа:</b></p><ul style="margin-top:0;padding-left:20px">' + items.map(x => '<li>' + escH(x) + '</li>').join('') + '</ul>' : '') +
+    '<p>После оплаты, пожалуйста, пришлите чек (квитанцию / платёжку) любым удобным способом: ответом на это письмо, в ' +
+    a(CONF.TELEGRAM, 'Telegram') + ' или в ' + a(CONF.WHATSAPP, 'WhatsApp') + '.</p>' +
+    '<p>Спасибо за заказ!<br>' + escH(CONF.SHOP_NAME) + ', тел. ' + escH(CONF.PHONE) + '</p></div>';
+  return {subject: subject, body: text, htmlBody: html};
+}
+function sellerMail(o, id){
+  const inv = o.invoice || {}, ct = o.contact || {}, tt = o.totals || {}, rs = o.reservation || {}, pay = o.payment || {}, d = o.delivery || {};
+  const sum = rub(tt.grand || tt.total);
+  const rows = [['Заказ', id], ['Счёт', inv.number || ''], ['Сумма к оплате', sum], ['Способ оплаты', pay.label || ''], ['Режим', o.modeName || ''],
+    ['Покупатель', [ct.company, ct.name].filter(Boolean).join(', ')], ['Телефон', ct.phone || ''], ['Почта', ct.email || ''],
+    ['Доставка', deliveryLine(o)], ['Получатель', [d.recipientName, d.recipientPhone].filter(Boolean).join(', ')], ['Оплата доставки', d.payer || ''],
+    ['Комментарий', [o.customerComment, d.comment].filter(Boolean).join(' | ')], ['Бронь до', rs.expiresAt ? fmt(rs.expiresAt) : '']]
+    .filter(r => String(r[1] || '').trim());
+  const items = itemsList(o);
+  const subject = 'Новый заказ ' + id + ' — ' + sum;
+  const text = rows.map(r => r[0] + ': ' + r[1]).join('\n') + (items.length ? '\n\nСостав:\n' + items.map(x => '• ' + x).join('\n') : '') +
+    '\n\nСчёт — во вложении. После оплаты поставьте в «Заказы» статус «оплачен».';
+  const html = '<div style="font:14px/1.45 Arial,Helvetica,sans-serif;color:#111;max-width:680px"><table style="border-collapse:collapse">' +
+    rows.map(r => '<tr><td style="padding:3px 12px 3px 0;color:#555;vertical-align:top">' + escH(r[0]) + '</td><td style="padding:3px 0"><b>' + escH(r[1]) + '</b></td></tr>').join('') + '</table>' +
+    (items.length ? '<p style="margin-bottom:4px"><b>Состав:</b></p><ul style="margin-top:0;padding-left:20px">' + items.map(x => '<li>' + escH(x) + '</li>').join('') + '</ul>' : '') +
+    '<p>Счёт — во вложении. После оплаты поставьте в «Заказы» статус «оплачен».</p></div>';
+  return {subject: subject, body: text, htmlBody: html};
+}
+function sendOrderEmails(data, o, id, trace){
+  const ct = o.contact || {}, res = {at: new Date().toISOString(), id: id, customer: '', seller: '', pdf: '', quotaBefore: null, quotaAfter: null};
+  const quota = () => { try { return MailApp.getRemainingDailyQuota(); } catch (x) { return 'нет данных: ' + x; } };
+  res.quotaBefore = quota();
+  let pdf = null;
+  try { pdf = invoicePdf(data, o, id); res.pdf = pdf ? pdf.getName() + ' (' + pdf.getBytes().length + ' байт)' : 'нет invoiceHtml'; }
+  catch (err) { res.pdf = 'ошибка: ' + err; logRow('ошибка PDF', id, err, err && err.stack); }
+  const att = pdf ? [pdf] : [];
+  // 1) клиенту
+  if (!CONF.SEND_INVOICE_EMAIL) res.customer = 'выключено';
+  else if (!ct.email) res.customer = 'нет email';
+  else try {
+    const m = customerMail(o, id);
+    MailApp.sendEmail({to: ct.email, replyTo: CONF.SELLER_EMAIL, name: CONF.SHOP_NAME, subject: m.subject, body: m.body, htmlBody: m.htmlBody, attachments: att});
+    res.customer = 'отправлено: ' + ct.email + (pdf ? '' : ' (без PDF)');
+  } catch (err) { res.customer = 'ошибка: ' + err; logRow('ошибка письма клиенту', id, err, (err && err.stack || '') + ' | квота: ' + res.quotaBefore); }
+  // 2) продавцу — всегда отдельным письмом (раньше был cc в том же письме: при совпадении адресов приходило одно письмо)
+  if (CONF.SELLER_EMAIL) try {
+    const m = sellerMail(o, id);
+    MailApp.sendEmail({to: CONF.SELLER_EMAIL, replyTo: ct.email || CONF.SELLER_EMAIL, name: CONF.SHOP_NAME + ' — заказы', subject: m.subject, body: m.body, htmlBody: m.htmlBody, attachments: att});
+    res.seller = 'отправлено: ' + CONF.SELLER_EMAIL;
+  } catch (err) { res.seller = 'ошибка: ' + err; logRow('ошибка письма продавцу', id, err, (err && err.stack || '') + ' | квота: ' + res.quotaBefore); }
+  else res.seller = 'SELLER_EMAIL не задан';
+  res.quotaAfter = quota();
+  trace.mail = {customer: res.customer, seller: res.seller, pdf: res.pdf, quotaBefore: res.quotaBefore, quotaAfter: res.quotaAfter};
+  remember('lastMail', res);
+  logRow('письма', id, 'клиенту: ' + res.customer + '; продавцу: ' + res.seller, 'PDF: ' + res.pdf + ' | квота MailApp: ' + res.quotaBefore + ' → ' + res.quotaAfter);
+  return res;
+}
+
 function doPost(e){
   let id = '', lock = null;
   const trace = {at: new Date().toISOString(), version: SCRIPT_VERSION, stage: 'старт', spreadsheetId: '', orderRow: 0, resRow: 0, logRow: 0, mail: ''};
@@ -147,7 +249,8 @@ function doPost(e){
     const ids = dataRows(ord).map(r => String(r[0]));
     if (ids.indexOf(String(id)) !== -1) {
       lock.releaseLock(); lock = null;
-      trace.stage = 'повтор'; trace.logRow = logRow('повтор', id, 'заказ уже записан — пропущен'); remember('lastPost', trace);
+      // повтор (резервная отправка формой) не затирает lastPost — там остаётся результат настоящей записи и писем
+      trace.stage = 'повтор'; trace.logRow = logRow('повтор', id, 'заказ уже записан — пропущен'); remember('lastDuplicate', trace);
       return jsonOut({ok: true, duplicate: true, version: SCRIPT_VERSION});
     }
     let h = {};
@@ -167,14 +270,8 @@ function doPost(e){
     lock.releaseLock(); lock = null;
     trace.stage = 'лог';
     trace.logRow = logRow('заказ', id, 'записан: строка ' + trace.orderRow + ' в «Заказы», ' + lines.length + ' строк брони с ' + (trace.resRow || '—'), (o.delivery && o.delivery.service) || '');
-    if (CONF.SEND_INVOICE_EMAIL && data.invoiceHtml && ct.email) {
-      trace.stage = 'письмо';
-      try {
-        const body = String(data.invoiceHtml).replace(/<body[^>]*>/i, m => m + deliveryHtml(o));
-        MailApp.sendEmail({to: ct.email, cc: CONF.SELLER_EMAIL, subject: `Счёт № ${inv.number || id} — ${pay.label || ''}`, htmlBody: body});
-        trace.mail = 'отправлено';
-      } catch (err) { trace.mail = 'ошибка: ' + err; logRow('ошибка письма', id, err, err && err.stack); }
-    } else trace.mail = 'не отправлялось (' + (!data.invoiceHtml ? 'нет invoiceHtml' : !ct.email ? 'нет email' : 'выключено') + ')';
+    trace.stage = 'письма';
+    sendOrderEmails(data, o, id, trace);
     trace.stage = 'готово'; remember('lastPost', trace);
     return jsonOut({ok: true, version: SCRIPT_VERSION, orderRow: trace.orderRow, resRow: trace.resRow, logRow: trace.logRow});
   } catch (err) {
@@ -206,7 +303,7 @@ function selftest(){
   } catch (err) { out.error = String(err); out.stack = String(err && err.stack || ''); }
   out.tabs = [CONF.ORDERS, CONF.RES, LOG_TAB].map(tabInfo);
   try { out.triggers = ScriptApp.getProjectTriggers().map(t => t.getHandlerFunction() + ' / ' + t.getEventType()); } catch (x) { out.triggers = String(x); }
-  out.lastPost = recall('lastPost'); out.lastLogError = recall('lastLogError');
+  out.lastPost = recall('lastPost'); out.lastMail = recall('lastMail'); out.lastLogError = recall('lastLogError');
   return out;
 }
 
@@ -214,7 +311,7 @@ function doGet(e){
   const action = e && e.parameter && e.parameter.action;
   if (action === 'version') return jsonOut({ok: true, version: SCRIPT_VERSION, sheet: ss().getName(), spreadsheetId: ss().getId(), tabs: [CONF.ORDERS, CONF.RES].map(n => n + (sh(n) ? ': есть' : ': НЕТ'))});
   if (action === 'selftest') return jsonOut(selftest());
-  if (action === 'last') return jsonOut({version: SCRIPT_VERSION, spreadsheetId: ss().getId(), lastPost: recall('lastPost'), lastLogError: recall('lastLogError'), tabs: [CONF.ORDERS, CONF.RES, LOG_TAB].map(tabInfo)});
+  if (action === 'last') return jsonOut({version: SCRIPT_VERSION, spreadsheetId: ss().getId(), lastPost: recall('lastPost'), lastDuplicate: recall('lastDuplicate'), lastMail: recall('lastMail'), lastLogError: recall('lastLogError'), tabs: [CONF.ORDERS, CONF.RES, LOG_TAB].map(tabInfo)});
   const res = sh(CONF.RES), h = headIdx(res), now = new Date();
   const out = dataRows(res).filter(r => String(r[h.status]).trim().toLowerCase() === 'бронь' && parseDate(r[h.expiresAt]) > now)
     .map(r => ({orderId: r[h.orderId], productId: r[h.productId], productName: r[h.productName], qty: Number(r[h.qty]), status: 'бронь', expiresAt: parseDate(r[h.expiresAt]).toISOString()}));
