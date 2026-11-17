@@ -495,3 +495,19 @@ a{color:var(--accent2)}
 .doc table{border-collapse:collapse;width:100%;margin:8px 0}
 .doc td{border:1px solid var(--line);padding:8px 10px;vertical-align:top;font-size:14px}
 .doc-nav{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 18px}
+
+/* material line on the start screen and homepage hero */
+.gate-materials{display:inline-block;margin:12px 0 0;padding:8px 16px;border-radius:99px;background:linear-gradient(180deg,rgba(255,196,74,.22),rgba(255,176,46,.08));border:1px solid rgba(255,176,46,.55);color:#ffd28a;font-weight:700;font-size:14px;letter-spacing:.02em;line-height:1.35}
+.badge.materials{line-height:1.4;white-space:normal;max-width:100%;background:linear-gradient(180deg,rgba(255,196,74,.18),rgba(255,176,46,.06));border-color:rgba(255,176,46,.5);color:#ffd28a}
+@media(max-width:640px){
+  .badge.materials,.gate-materials{font-size:13px;padding:7px 12px;border-radius:16px}
+  .mode-gate{padding:14px 16px 18px;align-items:center}
+  .logo-mark.big{font-size:36px}
+  .mode-gate h1{font-size:28px;margin:6px 0 4px}
+  .mode-gate .muted{font-size:14px;margin:0 0 4px}
+  .mode-buttons{margin-top:14px;gap:12px}
+  .mode-choice{min-height:0;padding:16px 14px;gap:6px}
+  .mode-choice b{font-size:40px}
+  .mode-choice .mode-ico{font-size:30px}
+  .mode-choice span{font-size:14px}
+}

@@ -358,7 +358,7 @@ function cardHTML(p){
   return `<article class="item ${inCart?'in-cart':''}" data-id="${p.id}">
     <div class="ph" data-zoom="${p.id}">${imgTag(p.image, p.name, 'loading="lazy" decoding="async" width="360" height="360"')}${stockBadge(p)}</div>
     <div class="body">
-      <span class="cat">${esc(CATS.find(c=>c.id===p.category).one)}</span>
+      <span class="cat">${esc(CATS.find(c=>c.id===p.category).one)} · металл</span>
       <span class="name">${esc(p.name)}</span>
       <span class="price">${money(basePrice(p))} <small>/ ${p.unit === 'комплект' ? 'компл. (2 шт)' : 'шт'}</small></span>
       ${reservationNote(p)}
@@ -415,7 +415,7 @@ function bindGrid(){
 }
 function zoom(p){
   const d = document.createElement('div'); d.className = 'lightbox';
-  d.innerHTML = `<div>${imgTag(p.image, '')}<div>${esc(p.name)} · ${esc(CATS.find(c=>c.id===p.category).one)}</div></div>`;
+  d.innerHTML = `<div>${imgTag(p.image, '')}<div>${esc(p.name)} · ${esc(CATS.find(c=>c.id===p.category).one)} · металл</div></div>`;
   d.onclick = () => d.remove(); document.body.appendChild(d);
 }
 function renderFittings(){

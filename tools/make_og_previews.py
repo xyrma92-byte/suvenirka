@@ -3,7 +3,8 @@
 
 Reuses the HTML-and-Chrome pipeline from the first OG set (stage collage,
 minimal typography, price-focused), with two anime keyrings in every
-variant and the wording «Мерч» instead of «рок-мерч».
+variant, the wording «Мерч» instead of «рок-мерч»,
+and a prominent «НАСТОЯЩИЙ МЕТАЛЛ» badge.
 
 Usage (from repo root or any cwd):
     python3 tools/make_og_previews.py
@@ -307,14 +308,16 @@ html,body{{width:1200px;height:630px;overflow:hidden;background:#0a0a0f;color:#f
 .logo i{{font-style:normal;color:#ff4d5a}}
 .pill{{display:inline-block;border:2px solid rgba(255,176,46,.7);color:#ffd28a;border-radius:99px;padding:8px 18px;font-weight:700;font-size:22px}}
 .url{{font-weight:600;color:#aab;font-size:20px}}
+.metal{{display:inline-flex;align-items:center;background:linear-gradient(180deg,#fff3c4 0%,#ffc44a 48%,#e89612 100%);color:#1a1200;font-family:U;font-weight:800;font-size:34px;letter-spacing:.07em;text-transform:uppercase;border-radius:99px;padding:12px 24px;line-height:1;box-shadow:0 8px 22px rgba(255,176,46,.45),inset 0 1px 0 rgba(255,255,255,.7)}}
 """
     (BUILD_DIR / "base.css").write_text(css, encoding="utf-8")
 
     a_html = f"""<html><head><link rel=stylesheet href=base.css><style>
 .shade{{background:linear-gradient(90deg,rgba(10,10,15,.96) 0%,rgba(10,10,15,.85) 45%,rgba(10,10,15,.35) 100%)}}
 .txt{{position:absolute;left:64px;top:56px;width:600px}}
-h1{{font-family:U;font-weight:900;font-size:76px;line-height:1.02;margin:34px 0 22px;letter-spacing:-1px}}
+h1{{font-family:U;font-weight:900;font-size:70px;line-height:1.02;margin:20px 0 18px;letter-spacing:-1px}}
 p{{font-size:26px;color:#dde;line-height:1.35;font-weight:600}}
+.txt .metal{{margin-top:22px}}
 .pills{{position:absolute;left:64px;bottom:56px;display:flex;gap:12px}}
 .grid{{position:absolute;right:52px;top:50px;display:grid;grid-template-columns:repeat(3,158px);gap:20px}}
 .grid .card{{width:158px;height:158px}}
@@ -322,6 +325,7 @@ p{{font-size:26px;color:#dde;line-height:1.35;font-weight:600}}
 .cap{{position:absolute;right:56px;bottom:56px;font-weight:700;font-size:20px;color:#ffd28a}}
 </style></head><body><div class=stage></div><div class=shade></div>
 <div class=txt><div class=logo><i>★</i>Сувенирка</div>
+<div class=metal>Настоящий металл</div>
 <h1>Мерч<br><span class=acc>оптом и<br>поштучно</span></h1>
 <p>Брелоки, магниты, значки и серьги.<br>Свой дизайн · производство в России</p></div>
 <div class=pills><span class=pill>опт от 500 шт</span><span class=pill>скидки до −15%</span><span class=pill>от 1 шт</span></div>
@@ -341,6 +345,7 @@ body{{background:radial-gradient(900px 500px at 85% 20%,rgba(255,77,90,.35),tran
 .top{{position:absolute;left:64px;top:52px;right:64px;display:flex;justify-content:space-between;align-items:center}}
 h1{{position:absolute;left:64px;top:118px;font-family:U;font-weight:900;font-size:140px;line-height:.95;letter-spacing:-3px;text-transform:uppercase}}
 h2{{position:absolute;left:66px;top:268px;font-family:U;font-weight:800;font-size:44px;letter-spacing:-1px}}
+.badge-slot{{position:absolute;left:66px;top:340px}}
 .sub{{position:absolute;left:68px;bottom:62px;font-size:26px;font-weight:700;color:#dde}}
 .sub b{{color:#ffb02e}}
 .row{{position:absolute;right:48px;top:130px;width:520px;height:360px}}
@@ -353,6 +358,7 @@ h2{{position:absolute;left:66px;top:268px;font-family:U;font-weight:800;font-siz
 <div class=top><div class=logo><i>★</i>Сувенирка</div><span class=url>xyrma92-byte.github.io/suvenirka</span></div>
 <h1>Мерч<span class=acc>.</span></h1>
 <h2 class=acc>оптом и поштучно</h2>
+<div class=badge-slot><div class=metal>Настоящий металл</div></div>
 <div class=row>
 <div class=card><img src={gojo}></div>
 <div class=card><img src={PINS['kish']}></div>
@@ -369,6 +375,7 @@ h2{{position:absolute;left:66px;top:268px;font-family:U;font-weight:800;font-siz
 .big .l1{{font-size:52px;color:#fff;letter-spacing:1px}}
 .big .l2{{font-size:150px;letter-spacing:-5px;margin-top:6px}}
 .big .l3{{font-size:30px;font-family:M;font-weight:700;color:#dde;margin-top:16px}}
+.big .metal{{margin-top:20px;font-size:30px;padding:11px 22px}}
 .prices{{position:absolute;left:64px;right:64px;bottom:52px;display:grid;grid-template-columns:repeat(4,1fr);gap:16px}}
 .pc{{background:rgba(27,30,38,.92);border:1px solid #2a2e39;border-radius:18px;padding:14px;display:flex;gap:14px;align-items:center}}
 .pc .card{{width:84px;height:84px;padding:6px;border-radius:14px;box-shadow:none;flex:none}}
@@ -382,7 +389,7 @@ h2{{position:absolute;left:66px;top:268px;font-family:U;font-weight:800;font-siz
 .feat .card:nth-child(2){{left:110px;top:0;transform:rotate(7deg);z-index:2}}
 </style></head><body><div class=stage></div><div class=shade></div>
 <div class=top><div class=logo><i>★</i>Сувенирка</div><span class=pill>производство в России</span></div>
-<div class=big><div class=l1>ОПТ ОТ</div><div class="l2 acc">189 ₽</div><div class=l3>за штуку · минимум 500 шт миксом</div></div>
+<div class=big><div class=l1>ОПТ ОТ</div><div class="l2 acc">189 ₽</div><div class=l3>за штуку · минимум 500 шт миксом</div><div class=metal>Настоящий металл</div></div>
 <div class=feat>
 <div class=card><img src={gojo}></div>
 <div class=card><img src={bakugo}></div>
