@@ -65,14 +65,56 @@ function setup(){
   ScriptApp.newTrigger('expireReservations').timeBased().everyHours(1).create();
 }
 
-const SCRIPT_VERSION = '2026-11-17.2';
-// Журнал входящих заявок и ошибок — вкладка «Лог» (создаётся сама)
+const SCRIPT_VERSION = '2026-11-17.3';
+const LOG_TAB = 'Лог', LOG_HEAD = ['Время', 'Событие', 'Заказ', 'Сообщение', 'Подробности'];
+
+// ---------- Надёжная запись: без appendRow/getLastRow ----------
+// Последняя строка, где в колонке A есть значение (флажки, проверка данных и форматирование справа не мешают).
+function lastDataRow(s){
+  const n = s.getMaxRows(); if (n < 1) return 0;
+  const v = s.getRange(1, 1, n, 1).getValues();
+  for (let i = n - 1; i >= 0; i--) if (String(v[i][0]).trim() !== '') return i + 1;
+  return 0;
+}
+// Строки данных (со 2-й до последней непустой по колонке A)
+function dataRows(s){
+  const last = lastDataRow(s), w = Math.max(s.getLastColumn(), 1);
+  return last > 1 ? s.getRange(2, 1, last - 1, w).getValues() : [];
+}
+// Текст, начинающийся с = + - @ (например, телефон «+7 …»), Таблица считает формулой — сохраняем как текст
+const safeCell = v => (typeof v === 'string' && /^[=+\-@]/.test(v)) ? "'" + v : v;
+// Пишет строки в первую действительно пустую строку (по колонке A), при нехватке места добавляет строки/колонки.
+// Возвращает номер первой записанной строки.
+function writeRows(s, rows){
+  if (!rows || !rows.length) return 0;
+  const width = Math.max.apply(null, rows.map(r => r.length));
+  const vals = rows.map(r => { const x = r.map(safeCell); while (x.length < width) x.push(''); return x; });
+  const start = Math.max(lastDataRow(s), 1) + 1, need = start + vals.length - 1;
+  if (need > s.getMaxRows()) s.insertRowsAfter(s.getMaxRows(), need - s.getMaxRows());
+  if (width > s.getMaxColumns()) s.insertColumnsAfter(s.getMaxColumns(), width - s.getMaxColumns());
+  s.getRange(start, 1, vals.length, width).setValues(vals);
+  SpreadsheetApp.flush();
+  return start;
+}
+// Диагностика в свойствах скрипта (без новых разрешений) — читается через ?action=selftest
+function remember(key, obj){ try { PropertiesService.getScriptProperties().setProperty(key, JSON.stringify(obj).slice(0, 8000)); } catch (x) {} }
+function recall(key){ try { return JSON.parse(PropertiesService.getScriptProperties().getProperty(key) || 'null'); } catch (x) { return null; } }
+
+function logSheet(){
+  let s = sh(LOG_TAB);
+  if (!s) { s = ss().insertSheet(LOG_TAB); s.getRange(1, 1, 1, LOG_HEAD.length).setValues([LOG_HEAD]).setFontWeight('bold'); s.setFrozenRows(1); }
+  else if (String(s.getRange(1, 1).getValue()).trim() === '') s.getRange(1, 1, 1, LOG_HEAD.length).setValues([LOG_HEAD]).setFontWeight('bold');
+  return s;
+}
+// Журнал входящих заявок и ошибок — вкладка «Лог». Возвращает номер строки (0 — не записалось, причина в lastLogError).
 function logRow(kind, id, msg, extra){
   try {
-    let s = sh('Лог');
-    if (!s) { s = ss().insertSheet('Лог'); s.appendRow(['Время', 'Событие', 'Заказ', 'Сообщение', 'Подробности']); s.setFrozenRows(1); }
-    s.appendRow([fmt(new Date()), kind, id || '', String(msg || '').slice(0, 1000), String(extra || '').slice(0, 2000)]);
-  } catch (err) { console.error('logRow', err); }
+    return writeRows(logSheet(), [[fmt(new Date()), kind, id || '', String(msg || '').slice(0, 1000), String(extra || '').slice(0, 2000)]]);
+  } catch (err) {
+    console.error('logRow', err, err && err.stack);
+    remember('lastLogError', {at: new Date().toISOString(), kind: kind, id: id, error: String(err), stack: String(err && err.stack || '')});
+    return 0;
+  }
 }
 // Заявка приходит либо JSON-телом (fetch, text/plain), либо полем формы payload (резервная отправка)
 function parsePayload(e){
@@ -87,17 +129,26 @@ const jsonOut = obj => ContentService.createTextOutput(JSON.stringify(obj)).setM
 
 function doPost(e){
   let id = '', lock = null;
+  const trace = {at: new Date().toISOString(), version: SCRIPT_VERSION, stage: 'старт', spreadsheetId: '', orderRow: 0, resRow: 0, logRow: 0, mail: ''};
   try {
+    trace.spreadsheetId = ss().getId();
+    trace.stage = 'разбор заявки';
     const data = parsePayload(e), o = data.order || {};
-    id = o.id || '';
+    id = o.id || ''; trace.id = id;
     if (!id) throw new Error('нет order.id');
     const pay = o.payment || {}, inv = o.invoice || {}, ct = o.contact || {}, tt = o.totals || {}, rs = o.reservation || {}, lines = rs.lines || [];
     const created = o.createdAt || new Date().toISOString(), until = rs.expiresAt || created;
+    trace.stage = 'блокировка';
     lock = LockService.getScriptLock(); lock.waitLock(20000);
     const ord = sh(CONF.ORDERS); if (!ord) throw new Error('нет вкладки «' + CONF.ORDERS + '»');
     const res = sh(CONF.RES); if (!res) throw new Error('нет вкладки «' + CONF.RES + '»');
-    const ids = ord.getLastRow() > 1 ? ord.getRange(2, 1, ord.getLastRow() - 1, 1).getValues().flat().map(String) : [];
-    if (ids.indexOf(String(id)) !== -1) { logRow('повтор', id, 'заказ уже записан — пропущен'); return jsonOut({ok: true, duplicate: true, version: SCRIPT_VERSION}); }
+    trace.stage = 'проверка повтора';
+    const ids = dataRows(ord).map(r => String(r[0]));
+    if (ids.indexOf(String(id)) !== -1) {
+      lock.releaseLock(); lock = null;
+      trace.stage = 'повтор'; trace.logRow = logRow('повтор', id, 'заказ уже записан — пропущен'); remember('lastPost', trace);
+      return jsonOut({ok: true, duplicate: true, version: SCRIPT_VERSION});
+    }
     let h = {};
     try { h = ensureOrderColumns(); } catch (err) { logRow('ошибка колонок', id, err); }
     const width = Math.max(ord.getLastColumn(), CONF.BASE_COLS);
@@ -107,30 +158,64 @@ function doPost(e){
     while (row.length < width) row.push('');
     try { const ex = extraValues(o); Object.keys(ex).forEach(k => { if (h[k] != null && h[k] >= CONF.BASE_COLS) row[h[k]] = ex[k]; }); }
     catch (err) { logRow('ошибка доставки/согласий', id, err); }
-    ord.appendRow(row);
-    lines.forEach(l => res.appendRow([id, fmt(created), fmt(until), l.productId || '', l.productName || '', l.category || '', Number(l.qty) || 0,
+    trace.stage = 'запись в «Заказы»';
+    trace.orderRow = writeRows(ord, [row]);
+    trace.stage = 'запись в «Бронь»';
+    trace.resRow = writeRows(res, lines.map(l => [id, fmt(created), fmt(until), l.productId || '', l.productName || '', l.category || '', Number(l.qty) || 0,
       'бронь', pay.label || '', ct.company || ct.name || '', (l.stockRows || []).join(' | '), '']));
     lock.releaseLock(); lock = null;
-    logRow('заказ', id, 'записан: ' + lines.length + ' строк брони', (o.delivery && o.delivery.service) || '');
+    trace.stage = 'лог';
+    trace.logRow = logRow('заказ', id, 'записан: строка ' + trace.orderRow + ' в «Заказы», ' + lines.length + ' строк брони с ' + (trace.resRow || '—'), (o.delivery && o.delivery.service) || '');
     if (CONF.SEND_INVOICE_EMAIL && data.invoiceHtml && ct.email) {
+      trace.stage = 'письмо';
       try {
         const body = String(data.invoiceHtml).replace(/<body[^>]*>/i, m => m + deliveryHtml(o));
         MailApp.sendEmail({to: ct.email, cc: CONF.SELLER_EMAIL, subject: `Счёт № ${inv.number || id} — ${pay.label || ''}`, htmlBody: body});
-      } catch (err) { logRow('ошибка письма', id, err, err && err.stack); }
-    }
-    return jsonOut({ok: true, version: SCRIPT_VERSION});
+        trace.mail = 'отправлено';
+      } catch (err) { trace.mail = 'ошибка: ' + err; logRow('ошибка письма', id, err, err && err.stack); }
+    } else trace.mail = 'не отправлялось (' + (!data.invoiceHtml ? 'нет invoiceHtml' : !ct.email ? 'нет email' : 'выключено') + ')';
+    trace.stage = 'готово'; remember('lastPost', trace);
+    return jsonOut({ok: true, version: SCRIPT_VERSION, orderRow: trace.orderRow, resRow: trace.resRow, logRow: trace.logRow});
   } catch (err) {
-    logRow('ОШИБКА', id, err, (err && err.stack || '') + ' | ' + String(e && e.postData && e.postData.contents || '').slice(0, 500));
-    return jsonOut({ok: false, error: String(err), version: SCRIPT_VERSION});
+    console.error('doPost', trace.stage, err, err && err.stack);
+    trace.error = String(err); trace.stack = String(err && err.stack || '');
+    trace.logRow = logRow('ОШИБКА', id, err, (err && err.stack || '') + ' | этап: ' + trace.stage + ' | ' + String(e && e.postData && e.postData.contents || '').slice(0, 500));
+    remember('lastPost', trace);
+    return jsonOut({ok: false, error: String(err), stage: trace.stage, logRow: trace.logRow, version: SCRIPT_VERSION});
   } finally { if (lock) try { lock.releaseLock(); } catch (x) {} }
+}
+
+function tabInfo(n){
+  const s = sh(n); if (!s) return {tab: n, exists: false};
+  const info = {tab: n, exists: true, sheetId: s.getSheetId(), maxRows: s.getMaxRows(), maxColumns: s.getMaxColumns(), getLastRow: s.getLastRow(), lastDataRowA: lastDataRow(s)};
+  try { info.protections = s.getProtections(SpreadsheetApp.ProtectionType.SHEET).length + s.getProtections(SpreadsheetApp.ProtectionType.RANGE).length; } catch (x) { info.protections = String(x); }
+  try { info.filter = !!s.getFilter(); } catch (x) {}
+  return info;
+}
+// GET ?action=selftest — пишет одну строку в «Лог» и сообщает, куда записал, плюс состояние вкладок и последние ошибки
+function selftest(){
+  const out = {ok: false, version: SCRIPT_VERSION};
+  try { const b = ss(); out.spreadsheetId = b.getId(); out.spreadsheetName = b.getName(); out.url = b.getUrl(); out.timeZone = b.getSpreadsheetTimeZone(); }
+  catch (err) { out.error = 'нет доступа к таблице: ' + err; return out; }
+  try {
+    const s = logSheet(); out.logSheetId = s.getSheetId();
+    out.row = writeRows(s, [[fmt(new Date()), 'selftest', '', 'проверка записи', 'GET ?action=selftest']]);
+    out.readBack = s.getRange(out.row, 1, 1, 5).getDisplayValues()[0];
+    out.ok = out.readBack[1] === 'selftest';
+  } catch (err) { out.error = String(err); out.stack = String(err && err.stack || ''); }
+  out.tabs = [CONF.ORDERS, CONF.RES, LOG_TAB].map(tabInfo);
+  try { out.triggers = ScriptApp.getProjectTriggers().map(t => t.getHandlerFunction() + ' / ' + t.getEventType()); } catch (x) { out.triggers = String(x); }
+  out.lastPost = recall('lastPost'); out.lastLogError = recall('lastLogError');
+  return out;
 }
 
 function doGet(e){
   const action = e && e.parameter && e.parameter.action;
-  if (action === 'version') return jsonOut({ok: true, version: SCRIPT_VERSION, sheet: ss().getName(), tabs: [CONF.ORDERS, CONF.RES].map(n => n + (sh(n) ? ': есть' : ': НЕТ'))});
+  if (action === 'version') return jsonOut({ok: true, version: SCRIPT_VERSION, sheet: ss().getName(), spreadsheetId: ss().getId(), tabs: [CONF.ORDERS, CONF.RES].map(n => n + (sh(n) ? ': есть' : ': НЕТ'))});
+  if (action === 'selftest') return jsonOut(selftest());
+  if (action === 'last') return jsonOut({version: SCRIPT_VERSION, spreadsheetId: ss().getId(), lastPost: recall('lastPost'), lastLogError: recall('lastLogError'), tabs: [CONF.ORDERS, CONF.RES, LOG_TAB].map(tabInfo)});
   const res = sh(CONF.RES), h = headIdx(res), now = new Date();
-  const rows = res.getLastRow() > 1 ? res.getRange(2, 1, res.getLastRow() - 1, res.getLastColumn()).getValues() : [];
-  const out = rows.filter(r => String(r[h.status]).trim().toLowerCase() === 'бронь' && parseDate(r[h.expiresAt]) > now)
+  const out = dataRows(res).filter(r => String(r[h.status]).trim().toLowerCase() === 'бронь' && parseDate(r[h.expiresAt]) > now)
     .map(r => ({orderId: r[h.orderId], productId: r[h.productId], productName: r[h.productName], qty: Number(r[h.qty]), status: 'бронь', expiresAt: parseDate(r[h.expiresAt]).toISOString()}));
   return ContentService.createTextOutput(JSON.stringify({reservations: out})).setMimeType(ContentService.MimeType.JSON);
 }
@@ -145,7 +230,7 @@ function onOrderEdit(e){
   const h = headIdx(s); if (e.range.getColumn() !== h['Статус'] + 1) return;
   processOrderRow(e.range.getRow());
 }
-function processAll(){ const s = sh(CONF.ORDERS); for (let r = 2; r <= s.getLastRow(); r++) processOrderRow(r); expireReservations(); }
+function processAll(){ const s = sh(CONF.ORDERS), last = lastDataRow(s); for (let r = 2; r <= last; r++) processOrderRow(r); expireReservations(); }
 
 function processOrderRow(row){
   const lock = LockService.getScriptLock(); lock.waitLock(20000);
@@ -153,7 +238,7 @@ function processOrderRow(row){
     const ord = sh(CONF.ORDERS), h = headIdx(ord), v = ord.getRange(row, 1, 1, ord.getLastColumn()).getValues()[0];
     const st = String(v[h['Статус']]).trim().toLowerCase(), id = v[h.orderId];
     const res = sh(CONF.RES), rh = headIdx(res);
-    const rrows = res.getLastRow() > 1 ? res.getRange(2, 1, res.getLastRow() - 1, res.getLastColumn()).getValues() : [];
+    const rrows = dataRows(res);
     if (st === 'оплачен' && !String(v[h['Списано со склада']]).trim()) {
       rrows.forEach((r, i) => {
         if (r[rh.orderId] !== id || String(r[rh['Списано']]).trim()) return;
@@ -179,10 +264,10 @@ function deduct(cat, names, qty){
 }
 function expireReservations(){
   const now = new Date(), res = sh(CONF.RES), rh = headIdx(res), ord = sh(CONF.ORDERS), oh = headIdx(ord);
-  if (res.getLastRow() > 1) res.getRange(2, 1, res.getLastRow() - 1, res.getLastColumn()).getValues().forEach((r, i) => {
+  dataRows(res).forEach((r, i) => {
     if (String(r[rh.status]).trim().toLowerCase() === 'бронь' && parseDate(r[rh.expiresAt]) <= now) res.getRange(i + 2, rh.status + 1).setValue('истекла');
   });
-  if (ord.getLastRow() > 1) ord.getRange(2, 1, ord.getLastRow() - 1, ord.getLastColumn()).getValues().forEach((r, i) => {
+  dataRows(ord).forEach((r, i) => {
     if (String(r[oh['Статус']]).trim().toLowerCase() === 'бронь' && parseDate(r[oh['Бронь до']]) <= now) ord.getRange(i + 2, oh['Статус'] + 1).setValue('истекла');
   });
 }
