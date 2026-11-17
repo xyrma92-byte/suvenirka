@@ -240,6 +240,7 @@ function initStatic(){
       <span>${esc(b.name)}</span>
     </a>`
   ).join('');
+  renderFittings();
   // price cards
   $('#priceCards').innerHTML = CATS.slice(1).map(c => {
     const p = PRODUCTS.find(x => x.category === c.id); const cnt = PRODUCTS.filter(x => x.category === c.id).length;
@@ -416,6 +417,45 @@ function zoom(p){
   const d = document.createElement('div'); d.className = 'lightbox';
   d.innerHTML = `<div>${imgTag(p.image, '')}<div>${esc(p.name)} · ${esc(CATS.find(c=>c.id===p.category).one)}</div></div>`;
   d.onclick = () => d.remove(); document.body.appendChild(d);
+}
+function renderFittings(){
+  const photos = CFG.fittingsPhotos || [];
+  const box = $('#fittingsShowcase');
+  if (!box) return;
+  box.hidden = photos.length === 0;
+  const grid = $('#fittingsGrid');
+  if (grid) grid.innerHTML = photos.map((p, i) =>
+    `<button type="button" class="fittings-card" data-fit="${i}" aria-label="${esc(p.caption)} — увеличить">
+      <img src="${esc(p.src)}" alt="${esc(p.alt || p.caption)}" width="747" height="1000" loading="lazy" decoding="async">
+      <span>${esc(p.caption)}</span>
+    </button>`
+  ).join('');
+  const oz = $('#fittingsOzon');
+  if (oz) {
+    if (CFG.ozon) { oz.href = CFG.ozon; oz.hidden = false; }
+    else { oz.removeAttribute('href'); oz.hidden = true; }
+  }
+}
+function bindFittings(){
+  const grid = $('#fittingsGrid');
+  if (!grid || grid.dataset.bound) return;
+  grid.dataset.bound = '1';
+  grid.addEventListener('click', e => {
+    const btn = e.target.closest('[data-fit]');
+    if (!btn) return;
+    const p = (CFG.fittingsPhotos || [])[Number(btn.dataset.fit)];
+    if (p) openLightbox(p.src, p.caption);
+  });
+}
+function openLightbox(src, caption){
+  $('.lightbox')?.remove();
+  const d = document.createElement('div');
+  d.className = 'lightbox';
+  d.setAttribute('role', 'dialog');
+  d.setAttribute('aria-label', caption || 'Увеличенное фото');
+  d.innerHTML = `<div><img src="${esc(src)}" alt="${esc(caption || '')}">${caption ? `<div>${esc(caption)}</div>` : ''}</div>`;
+  d.onclick = () => d.remove();
+  document.body.appendChild(d);
 }
 
 // ---------- progress / cart ----------
@@ -898,7 +938,7 @@ async function loadRemoteReservations(){
   } catch(e){ console.warn('Брони из таблицы не загрузились', e); }
 }
 
-bindMode(); applyMode(); renderTabs(); renderBandIndex(); bindGrid(); bindBandIndex(); bindCart(); bindOrderForm(); bindCustomForm();
+bindMode(); applyMode(); renderTabs(); renderBandIndex(); bindGrid(); bindBandIndex(); bindFittings(); bindCart(); bindOrderForm(); bindCustomForm();
 window.addEventListener('hashchange', route); route();
 loadRemoteReservations();
 let lastActive = JSON.stringify(resIndex());
