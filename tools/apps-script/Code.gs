@@ -27,7 +27,7 @@ const CONF = {
   // Новые колонки «Заказы» — добавляются в конец, если их ещё нет
   EXTRA_COLS: ['Служба доставки', 'Город доставки', 'Адрес / ПВЗ', 'Индекс', 'Получатель', 'Телефон получателя',
     'Комментарий к доставке', 'Оплата доставки', 'Трек-номер', 'Согласие на обработку ПД', 'Согласие с условиями',
-    'Согласие на рассылку', 'Дата и время согласий', 'Версия документов']
+    'Согласие на рассылку', 'Дата и время согласий', 'Версия документов', 'Товары']
 };
 const ss = () => SpreadsheetApp.getActive();
 const sh = n => ss().getSheetByName(n);
@@ -40,7 +40,12 @@ function ensureOrderColumns(){
   const ord = sh(CONF.ORDERS), last = Math.max(ord.getLastColumn(), CONF.BASE_COLS);
   const head = ord.getRange(1, 1, 1, last).getValues()[0].map(x => String(x).trim());
   const missing = CONF.EXTRA_COLS.filter(c => head.indexOf(c) === -1);
-  if (missing.length) ord.getRange(1, last + 1, 1, missing.length).setValues([missing]).setFontWeight('bold');
+  if (missing.length) {
+    // на листе может не хватать колонок (getRange за пределами листа падает) — добавляем
+    const need = last + missing.length - ord.getMaxColumns();
+    if (need > 0) ord.insertColumnsAfter(ord.getMaxColumns(), need);
+    ord.getRange(1, last + 1, 1, missing.length).setValues([missing]).setFontWeight('bold');
+  }
   return headIdx(ord);
 }
 function extraValues(o){
@@ -51,7 +56,7 @@ function extraValues(o){
     'Оплата доставки': d.payer || '', 'Трек-номер': '',
     'Согласие на обработку ПД': o.consents ? yn(c.personalData) : '', 'Согласие с условиями': o.consents ? yn(c.terms) : '',
     'Согласие на рассылку': o.consents ? yn(c.marketing) : '', 'Дата и время согласий': c.acceptedAt ? fmt(c.acceptedAt) : '',
-    'Версия документов': c.docsVersion || ''
+    'Версия документов': c.docsVersion || '', 'Товары': itemsCell(o)
   };
 }
 function deliveryHtml(o){
@@ -70,7 +75,7 @@ function setup(){
   ScriptApp.newTrigger('expireReservations').timeBased().everyHours(1).create();
 }
 
-const SCRIPT_VERSION = '2026-11-17.5';
+const SCRIPT_VERSION = '2026-11-17.6';
 const LOG_TAB = 'Лог', LOG_HEAD = ['Время', 'Событие', 'Заказ', 'Сообщение', 'Подробности'];
 
 // ---------- Надёжная запись: без appendRow/getLastRow ----------
@@ -82,9 +87,12 @@ function lastDataRow(s){
   return 0;
 }
 // Строки данных (со 2-й до последней непустой по колонке A)
-function dataRows(s){
+// display=true — как видно в ячейках (для дат: Таблица может сама превратить «18.11.2026 23:59» в дату в своём поясе)
+function dataRows(s, display){
   const last = lastDataRow(s), w = Math.max(s.getLastColumn(), 1);
-  return last > 1 ? s.getRange(2, 1, last - 1, w).getValues() : [];
+  if (last <= 1) return [];
+  const r = s.getRange(2, 1, last - 1, w);
+  return display ? r.getDisplayValues() : r.getValues();
 }
 // Текст, начинающийся с = + - @ (например, телефон «+7 …»), Таблица считает формулой — сохраняем как текст
 const safeCell = v => (typeof v === 'string' && /^[=+\-@]/.test(v)) ? "'" + v : v;
@@ -152,8 +160,27 @@ function deliveryLine(o){
   const addr = [d.postIndex, d.city, d.address].filter(x => String(x || '').trim()).join(', ');
   return [d.service, addr].filter(Boolean).join(' — ');
 }
+const unitShort = u => u === 'комплект' ? 'компл.' : u === 'услуга' ? 'усл.' : 'шт';
+// Статус позиции: из наличия (бронь) / под заказ / свой дизайн / услуга
+function itemStatus(i){
+  if (i.fee) return 'разово, без скидки';
+  if (i.custom) return 'свой дизайн, под заказ';
+  const a = Number(i.inStockQty) || 0, b = Number(i.madeToOrderQty) || 0;
+  if (b && a) return a + ' из наличия (бронь) + ' + b + ' под заказ';
+  if (b) return 'под заказ';
+  return 'из наличия (бронь)';
+}
 function itemsList(o){
-  return (o.items || []).map(i => (i.name || '') + (i.categoryName ? ' (' + i.categoryName + ')' : '') + ' — ' + (Number(i.qty) || 0) + ' ' + (i.unit === 'комплект' ? 'компл.' : 'шт') + (i.sum != null ? ', ' + rub(i.sum) : ''));
+  return (o.items || []).map(i => (i.name || '') + (i.categoryName ? ' (' + i.categoryName + ')' : '') + ' — ' + (Number(i.qty) || 0) + ' ' + unitShort(i.unit) +
+    (i.sum != null ? ', ' + rub(i.sum) : '') + ' — ' + itemStatus(i) + (i.custom && i.link ? '; референс: ' + i.link : ''));
+}
+// Полный состав заказа одной ячейкой «Товары» (аудит: что заказано, что в брони, что под заказ / свой дизайн)
+function itemsCell(o){
+  const it = o.items || []; if (!it.length) return '';
+  return it.map((i, n) => (n + 1) + '. ' + (i.custom || i.fee ? '' : '[' + (i.id || '') + '] ') + (i.name || '') + (i.categoryName ? ' (' + i.categoryName + ')' : '') +
+    ' — ' + (Number(i.qty) || 0) + ' ' + unitShort(i.unit) + ' × ' + rub(i.unitPrice) + ' = ' + rub(i.sum) + ' — ' + itemStatus(i) +
+    (i.custom && i.description && String(i.name || '').indexOf(i.description) === -1 ? '; описание: ' + i.description : '') +
+    (i.custom && i.link ? '; референс: ' + i.link : '')).join('\n').slice(0, 45000);
 }
 function customerMail(o, id){
   const inv = o.invoice || {}, ct = o.contact || {}, tt = o.totals || {}, rs = o.reservation || {}, d = o.delivery || null;
@@ -166,7 +193,7 @@ function customerMail(o, id){
   const subject = 'Ваш заказ № ' + id + ' — счёт № ' + num;
   const text = [hello, '',
     'Вы оформили заказ № ' + id + ' на сумму ' + sum + '. Счёт № ' + num + ' во вложении (PDF).',
-    until ? 'Товар забронирован до ' + until + ' — оплатите, пожалуйста, до этого времени.' : '',
+    until && (rs.lines || []).length ? 'Товар из наличия забронирован до ' + until + ' — оплатите, пожалуйста, до этого времени.' : (until ? 'Счёт действителен до ' + until + '.' : ''),
     dlv, '', items.length ? 'Состав заказа:\n' + items.map(x => '• ' + x).join('\n') : '', '',
     'После оплаты, пожалуйста, пришлите чек (квитанцию / платёжку) любым удобным способом: ответом на это письмо, в Telegram (' + CONF.TELEGRAM + ') или в WhatsApp (' + CONF.WHATSAPP + ').',
     '', 'Спасибо за заказ!', CONF.SHOP_NAME + ', тел. ' + CONF.PHONE].filter((x, i, a) => x !== '' || a[i - 1] !== '').join('\n');
@@ -174,7 +201,7 @@ function customerMail(o, id){
   const html = '<div style="font:15px/1.5 Arial,Helvetica,sans-serif;color:#111;max-width:640px">' +
     '<p>' + escH(hello) + '</p>' +
     '<p>Вы оформили заказ <b>№ ' + escH(id) + '</b> на сумму <b>' + escH(sum) + '</b>. Счёт № ' + escH(num) + ' — во вложении (PDF).</p>' +
-    (until ? '<p>Товар забронирован до <b>' + escH(until) + '</b> — оплатите, пожалуйста, до этого времени.</p>' : '') +
+    (until && (rs.lines || []).length ? '<p>Товар из наличия забронирован до <b>' + escH(until) + '</b> — оплатите, пожалуйста, до этого времени.</p>' : (until ? '<p>Счёт действителен до <b>' + escH(until) + '</b>.</p>' : '')) +
     (dlv ? '<p>' + escH(dlv) + '</p>' : '') +
     (items.length ? '<p style="margin-bottom:4px"><b>Состав заказа:</b></p><ul style="margin-top:0;padding-left:20px">' + items.map(x => '<li>' + escH(x) + '</li>').join('') + '</ul>' : '') +
     '<p>После оплаты, пожалуйста, пришлите чек (квитанцию / платёжку) любым удобным способом: ответом на это письмо, в ' +
@@ -313,14 +340,26 @@ function doGet(e){
   if (action === 'selftest') return jsonOut(selftest());
   if (action === 'last') return jsonOut({version: SCRIPT_VERSION, spreadsheetId: ss().getId(), lastPost: recall('lastPost'), lastDuplicate: recall('lastDuplicate'), lastMail: recall('lastMail'), lastLogError: recall('lastLogError'), tabs: [CONF.ORDERS, CONF.RES, LOG_TAB].map(tabInfo)});
   const res = sh(CONF.RES), h = headIdx(res), now = new Date();
-  const out = dataRows(res).filter(r => String(r[h.status]).trim().toLowerCase() === 'бронь' && parseDate(r[h.expiresAt]) > now)
-    .map(r => ({orderId: r[h.orderId], productId: r[h.productId], productName: r[h.productName], qty: Number(r[h.qty]), status: 'бронь', expiresAt: parseDate(r[h.expiresAt]).toISOString()}));
+  // даты — по тексту ячейки (см. dataRows display), числа — по значению
+  const vals = dataRows(res), disp = dataRows(res, true);
+  const out = vals.map((r, i) => ({r: r, until: parseDate(disp[i][h.expiresAt])}))
+    .filter(x => String(x.r[h.status]).trim().toLowerCase() === 'бронь' && x.until > now)
+    .map(x => ({orderId: x.r[h.orderId], productId: x.r[h.productId], productName: x.r[h.productName], qty: Number(x.r[h.qty]), status: 'бронь', expiresAt: x.until.toISOString()}));
   return ContentService.createTextOutput(JSON.stringify({reservations: out})).setMimeType(ContentService.MimeType.JSON);
+}
+// Смещение пояса TZ() в минутах для момента d (учитывает летнее время, если оно есть)
+function tzOffsetMin(d){ const z = Utilities.formatDate(d, TZ(), 'Z'), sg = z[0] === '-' ? -1 : 1; return sg * (Number(z.slice(1, 3)) * 60 + Number(z.slice(3, 5))); }
+// «дд.мм.гггг чч:мм» — время на часах пояса TZ() (тот же пояс, в котором пишет fmt) → точный момент
+function wallTime(y, mo, d, h, mi){
+  const guess = Date.UTC(y, mo, d, h, mi);
+  let t = guess - tzOffsetMin(new Date(guess)) * 60000;
+  t = guess - tzOffsetMin(new Date(t)) * 60000;
+  return new Date(t);
 }
 function parseDate(v){
   if (v instanceof Date) return v;
   const m = String(v).match(/(\d{2})\.(\d{2})\.(\d{4})(?:\s+(\d{1,2}):(\d{2}))?/);
-  return m ? new Date(+m[3], +m[2] - 1, +m[1], +(m[4] || 23), +(m[5] || 59)) : new Date(v);
+  return m ? wallTime(+m[3], +m[2] - 1, +m[1], m[4] != null ? +m[4] : 23, m[5] != null ? +m[5] : 59) : new Date(v);
 }
 
 function onOrderEdit(e){
@@ -362,10 +401,10 @@ function deduct(cat, names, qty){
 }
 function expireReservations(){
   const now = new Date(), res = sh(CONF.RES), rh = headIdx(res), ord = sh(CONF.ORDERS), oh = headIdx(ord);
-  dataRows(res).forEach((r, i) => {
+  dataRows(res, true).forEach((r, i) => {
     if (String(r[rh.status]).trim().toLowerCase() === 'бронь' && parseDate(r[rh.expiresAt]) <= now) res.getRange(i + 2, rh.status + 1).setValue('истекла');
   });
-  dataRows(ord).forEach((r, i) => {
+  dataRows(ord, true).forEach((r, i) => {
     if (String(r[oh['Статус']]).trim().toLowerCase() === 'бронь' && parseDate(r[oh['Бронь до']]) <= now) ord.getRange(i + 2, oh['Статус'] + 1).setValue('истекла');
   });
 }

@@ -511,3 +511,50 @@ a{color:var(--accent2)}
   .mode-choice .mode-ico{font-size:30px}
   .mode-choice span{font-size:14px}
 }
+
+/* ===== Позиции «по своему дизайну» ===== */
+.add-custom{border-style:dashed;border-color:var(--accent2);color:var(--accent2);background:rgba(255,176,46,.06)}
+.add-custom:hover{background:rgba(255,176,46,.14)}
+.add-custom-wrap{padding:14px 0 6px;display:flex;flex-direction:column;gap:6px}
+.add-custom-wrap .add-custom{width:100%}
+.add-custom-hint{font-size:12px;text-align:center}
+.add-custom-cat{padding:10px 14px;font-size:14px}
+.custom-ico{width:56px;height:56px;border-radius:8px;display:grid;place-items:center;font-size:26px;background:linear-gradient(135deg,rgba(255,77,90,.25),rgba(255,176,46,.25));border:1px solid var(--line)}
+.custom-ico.fee{width:40px;height:40px;font-size:18px;margin-left:8px;background:var(--card)}
+.line.custom-line{border-bottom:0;padding-bottom:4px}
+.line.fee-line{padding-top:4px}
+.line.fee-line .ln-name{font-size:13px}
+.line.fee-line .ln-right b{font-size:14px;white-space:nowrap}
+.cmodal{position:fixed;inset:0;z-index:80;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;padding:16px;overflow:auto}
+.cmodal-box{position:relative;width:min(520px,100%);max-height:calc(100vh - 32px);overflow:auto;margin:0;background:var(--bg2);border:1px solid var(--line);border-radius:18px;padding:22px}
+.cmodal-box h3{margin:0 34px 6px 0;font-size:20px}
+.cmodal-x{position:absolute;top:12px;right:12px}
+.cm-lead{font-size:14px;margin:0 0 14px}
+.cm-label{font-size:14px;color:#c8ccd6;font-weight:500;margin-bottom:6px}
+.cm-cats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px}
+.form label.cm-cat{margin:0;cursor:pointer}
+.cm-cat input{position:absolute;opacity:0;pointer-events:none}
+.cm-cat span{display:flex;flex-direction:column;gap:2px;align-items:center;text-align:center;padding:10px 6px;border:1px solid var(--line);border-radius:12px;background:var(--card);color:var(--text)}
+.cm-cat span small{color:var(--muted);font-size:12px}
+.cm-cat input:checked + span{border-color:var(--accent2);box-shadow:0 0 0 2px rgba(255,176,46,.35);background:rgba(255,176,46,.08)}
+.cm-cat input:focus-visible + span{outline:2px solid var(--accent2)}
+.cm-stepper{max-width:200px}
+.form .cm-stepper input{border:0!important;padding:0;background:transparent}
+.cm-calc{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:14px;margin-bottom:10px}
+.cm-actions{display:flex;gap:10px;flex-wrap:wrap}
+.cm-actions .btn{flex:1;min-width:140px}
+@media(max-width:640px){
+  .cm-cats{grid-template-columns:repeat(2,1fr)}
+  .cmodal{align-items:flex-end;padding:0}
+  .cmodal-box{width:100%;border-radius:18px 18px 0 0;max-height:92vh;padding:18px 16px calc(18px + env(safe-area-inset-bottom))}
+  .add-custom-cat{width:100%}
+}
+/* мобильная корзина: компактный низ, чтобы список позиций было видно */
+@media(max-width:640px){
+  .drawer-foot{gap:6px;padding:10px 16px calc(10px + env(safe-area-inset-bottom));font-size:14px}
+  .drawer-foot .tier-row,.drawer-foot .by-cat{display:none}
+  .drawer-foot .progress{margin:4px 0 2px}
+  .drawer-foot .dlv-box{font-size:12px;padding:8px 10px}
+  .drawer-foot .totals{row-gap:2px}
+  .drawer-foot .btn.big{padding:12px 16px}
+}

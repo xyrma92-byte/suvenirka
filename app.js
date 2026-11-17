@@ -87,6 +87,7 @@ function resolveBandSlug(s){
   return '';
 }
 
+const LS_CUSTOM = 'merch_custom_v1';
 const LS_CART = 'merch_cart_v1', LS_HIST = 'merch_orders_v1', LS_MODE = 'merch_mode_v1', LS_RES = 'merch_reservations_v1', LS_INVSEQ = 'merch_invoice_seq_v1';
 const PM = CFG.paymentMethods || {};
 let mode = (() => { try { const m = localStorage.getItem(LS_MODE); return m === 'retail' || m === 'wholesale' ? m : null; } catch(e){ return null; } })();
@@ -161,7 +162,9 @@ function tierFor(qty){
 function nextTier(qty){ return isRetail() ? null : (CFG.tiers.find(x => x.from > qty) || null); }
 function calc(cart, pmId){
   const lines = Object.entries(cart).filter(([id,q]) => BY_ID[id] && q > 0).map(([id,q]) => ({p: BY_ID[id], qty: q}));
-  const totalQty = lines.reduce((s,l) => s + l.qty, 0);
+  // позиции «по своему дизайну»: цена изделия по категории (режим), считаются в тираж и скидку; + разово designFee за каждую (без скидки)
+  const custom = customs.filter(x => CAT_NAME[x.category] && x.category !== 'all' && Number(x.qty) > 0).map(x => ({...x, qty: Number(x.qty)}));
+  const totalQty = lines.reduce((s,l) => s + l.qty, 0) + custom.reduce((s,l) => s + l.qty, 0);
   const tier = tierFor(totalQty);
   const disc = tier ? tier.discount : 0;
   let subtotal = 0, total = 0;
@@ -173,15 +176,25 @@ function calc(cart, pmId){
     subtotal += l.base * l.qty; total += l.sum;
     byCat[l.p.category] = (byCat[l.p.category]||0) + l.qty;
   }
-  subtotal = r2(subtotal); total = r2(total);
+  for (const l of custom){
+    l.base = catPrice(l.category);
+    l.unitPrice = r2(l.base * (1 - disc/100));
+    l.sum = r2(l.unitPrice * l.qty);
+    subtotal += l.base * l.qty; total += l.sum;
+    byCat[l.category] = (byCat[l.category]||0) + l.qty;
+  }
+  const designFee = Number(CFG.designFee) || 0, designFees = r2(custom.length * designFee);
+  subtotal = r2(subtotal + designFees); total = r2(total + designFees);
   const pm = PM[pmId] || null, markupRate = pm ? (pm.markupRate || 0) : 0, markup = r2(total * markupRate);
-  return {lines, totalQty, tier, disc, subtotal, total, discountSum: r2(subtotal - total), byCat,
+  return {lines, custom, count: lines.length + custom.length, designFee, designFees, totalQty, tier, disc, subtotal, total, discountSum: r2(subtotal - total), byCat,
           pm, markupRate, markup, grand: r2(total + markup),
           meetsMin: totalQty >= minQty(), next: nextTier(totalQty)};
 }
 
 // ---------- state ----------
 let cart = load(LS_CART, {});
+let customs = load(LS_CUSTOM, []); // [{cid, category, qty, desc, link}]
+const saveCustoms = () => save(LS_CUSTOM, customs);
 const pending = {}; // qty selected on cards not yet in cart
 let activeCat = 'all', query = '', onlyStock = false, activeBand = '', bandQuery = '', sortMode = (() => { try { const v = localStorage.getItem('merch_sort'); return ['default','stock','alpha'].includes(v) ? v : 'default'; } catch(_) { return 'default'; } })();
 function load(k, d){ try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch(e){ return d; } }
@@ -474,10 +487,11 @@ function progressHTML(c){
 function totalsHTML(c){
   const cats = Object.entries(c.byCat).map(([k,v]) => `${CAT_NAME[k]}: ${num(v)}`).join(' · ');
   return `<div class="totals">
-    <span>Позиций</span><span>${c.lines.length}</span>
+    <span>Позиций</span><span>${c.count}</span>
     <span>Всего изделий</span><span>${num(c.totalQty)} шт</span>
     <span>${isRetail() ? 'Сумма' : 'Сумма без скидки'}</span><span>${money(c.subtotal)}</span>
-    ${isRetail() ? '' : `<span class="disc">Скидка ${c.disc}%</span><span class="disc">−${money(c.discountSum)}</span>`}
+    ${c.designFees ? `<span class="muted">в т.ч. разработка дизайна × ${c.custom.length}</span><span class="muted">${money(c.designFees)}</span>` : ''}
+    ${isRetail() ? '' : `<span class="disc">Скидка ${c.disc}%${c.designFees ? ' <small>(на изделия)</small>' : ''}</span><span class="disc">−${money(c.discountSum)}</span>`}
     ${c.pm && c.markup ? `<span>Товары</span><span>${money(c.total)}</span><span class="markup">${esc(c.pm.markupLabel)}</span><span class="markup">+${money(c.markup)}</span>` : ''}
     <span class="grand">Итого${c.pm ? ' к оплате' : ''}</span><span class="grand">${money(c.grand)}</span>
   </div>${c.pm ? `<div class="by-cat">Оплата: ${esc(c.pm.label)}${c.markup ? '' : ' — без надбавок'}</div>` : ''}${cats ? `<div class="by-cat">${cats}</div>` : ''}`;
@@ -486,17 +500,17 @@ function refreshCart(){
   const c = calc(cart);
   $('#cartCount').textContent = num(c.totalQty);
   $('#miniProgress').innerHTML = progressHTML(c) ;
-  $('#cartItems').innerHTML = c.lines.length ? c.lines.map(l => `
+  $('#cartItems').innerHTML = (c.count ? c.lines.map(l => `
     <div class="line" data-id="${l.p.id}">
       ${imgTag(l.p.image, '', 'loading="lazy"')}
       <div><div class="ln-name">${esc(l.p.name)}</div><div class="ln-meta">${esc(CATS.find(x=>x.id===l.p.category).one)} · ${money(l.unitPrice)}${c.disc?` <s>${money(l.base)}</s>`:''} / ${unitWord(l.p)}</div><div class="ln-meta"><b>${money(l.sum)}</b></div><div class="ln-stock"><span class="stock ${stockSplit(l.p,l.qty).toOrder?'order':'in'}">${esc(lineStockText(l.p,l.qty))}</span></div></div>
       <div class="ln-right"><div class="stepper"><button data-cstep="-10">−</button><input type="number" min="0" value="${l.qty}" data-cqty><button data-cstep="10">+</button></div><button class="rm" data-crm>Удалить</button></div>
-    </div>`).join('') : `<p class="empty">Корзина пуста.<br><a href="#catalog" data-close>Перейти в каталог</a></p>`;
+    </div>`).join('') + c.custom.map(customLineHTML.bind(null, c)).join('') : `<p class="empty">Корзина пуста.<br><a href="#catalog" data-close>Перейти в каталог</a></p>`) + addCustomBtnHTML();
   $('#cartFoot').innerHTML = progressHTML(c) + totalsHTML(c) +
-    (c.lines.length && !c.meetsMin ? `<div class="warn">Минимальный заказ — ${num(minQty())} шт суммарно (можно миксом). Добавьте ещё ${num(minQty() - c.totalQty)} шт.</div>` : '') +
-    (c.lines.length ? `<div class="hint-box dlv-box">🚚 ${esc(DLV_NOTICE)}</div>` : '') +
+    (c.count && !c.meetsMin ? `<div class="warn">Минимальный заказ — ${num(minQty())} шт суммарно (можно миксом). Добавьте ещё ${num(minQty() - c.totalQty)} шт.</div>` : '') +
+    (c.count ? `<div class="hint-box dlv-box">🚚 ${esc(DLV_NOTICE)}</div>` : '') +
     `<button class="btn primary big" id="toCheckout" ${c.meetsMin?'':'disabled'}>Оформить заказ</button>` +
-    (c.lines.length ? `<button class="btn ghost" id="clearCart">Очистить</button>` : '');
+    (c.count ? `<button class="btn ghost" id="clearCart">Очистить</button>` : '');
   if (location.hash === '#checkout') renderCheckoutSummary();
 }
 function bindCart(){
@@ -505,12 +519,87 @@ function bindCart(){
   $('#drawer').addEventListener('click', e => {
     if (e.target.closest('[data-close]')) return closeDrawer();
     if (e.target.id === 'toCheckout') { closeDrawer(); location.hash = '#checkout'; return; }
-    if (e.target.id === 'clearCart') { if (confirm('Очистить корзину?')) { const ids = Object.keys(cart); cart = {}; save(LS_CART, cart); refreshCart(); ids.forEach(refreshCard); } return; }
-    const line = e.target.closest('.line'); if (!line) return; const id = line.dataset.id;
+    if (e.target.id === 'clearCart') { if (confirm('Очистить корзину?')) { const ids = Object.keys(cart); cart = {}; save(LS_CART, cart); customs = []; saveCustoms(); refreshCart(); ids.forEach(refreshCard); } return; }
+    const cl = e.target.closest('[data-cid]');
+    if (cl){ const cid = cl.dataset.cid;
+      if (e.target.dataset.ustep) { const x = customs.find(k => k.cid === cid); if (x) setCustomQty(cid, Number(x.qty) + Number(e.target.dataset.ustep) * qStep() / 10); }
+      if (e.target.hasAttribute('data-urm')) removeCustom(cid);
+      return; }
+    const line = e.target.closest('.line'); if (!line || !line.dataset.id) return; const id = line.dataset.id;
     if (e.target.dataset.cstep) setQty(id, (cart[id]||0) + Number(e.target.dataset.cstep) * qStep() / 10);
     if (e.target.hasAttribute('data-crm')) setQty(id, 0);
   });
-  $('#drawer').addEventListener('change', e => { if (e.target.matches('[data-cqty]')) setQty(e.target.closest('.line').dataset.id, e.target.value); });
+  $('#drawer').addEventListener('change', e => {
+    if (e.target.matches('[data-cqty]')) setQty(e.target.closest('.line').dataset.id, e.target.value);
+    if (e.target.matches('[data-uqty]')) setCustomQty(e.target.closest('[data-cid]').dataset.cid, e.target.value);
+  });
+  document.addEventListener('click', e => { if (e.target.closest('[data-addcustom]')) { e.preventDefault(); openCustomModal(); } });
+}
+// ---------- позиции «по своему дизайну» ----------
+const customUnit = cat => cat === 'earrings' ? 'комплект' : 'шт';
+const shortDesc = s => { s = String(s || '').replace(/\s+/g, ' ').trim(); return s.length > 60 ? s.slice(0, 57) + '…' : s; };
+const customLabel = x => 'Свой дизайн' + (x.desc ? ': ' + shortDesc(x.desc) : '');
+function addCustomBtnHTML(){
+  return `<div class="add-custom-wrap"><button type="button" class="btn add-custom" data-addcustom>＋ Добавить позицию по своему дизайну</button>
+    <div class="muted add-custom-hint">Цена изделия как в каталоге + разово ${money(Number(CFG.designFee) || 0)} за разработку дизайна. Изготовление ${esc(CFG.madeToOrderLead)}.</div></div>`;
+}
+function customLineHTML(c, l){
+  const cat = CATS.find(x => x.id === l.category);
+  return `<div class="line custom-line" data-cid="${esc(l.cid)}">
+      <div class="custom-ico" aria-hidden="true">🎨</div>
+      <div><div class="ln-name">${esc(customLabel(l))}</div><div class="ln-meta">${esc(cat ? cat.one : '')} · ${money(l.unitPrice)}${c.disc ? ` <s>${money(l.base)}</s>` : ''} / ${l.category === 'earrings' ? 'компл.' : 'шт'}</div><div class="ln-meta"><b>${money(l.sum)}</b></div>${l.link ? `<div class="ln-meta">📎 ${esc(shortDesc(l.link))}</div>` : ''}<div class="ln-stock"><span class="stock order">Свой дизайн · под заказ</span></div></div>
+      <div class="ln-right"><div class="stepper"><button data-ustep="-10">−</button><input type="number" min="0" value="${l.qty}" data-uqty><button data-ustep="10">+</button></div><button class="rm" data-urm>Удалить</button></div>
+    </div>
+    <div class="line fee-line" data-cid="${esc(l.cid)}"><div class="custom-ico fee" aria-hidden="true">✏️</div>
+      <div><div class="ln-name">Разработка дизайна</div><div class="ln-meta">разово, 1 услуга · к «${esc(shortDesc(l.desc))}» · без скидки</div></div>
+      <div class="ln-right"><b>${money(c.designFee)}</b></div></div>`;
+}
+function setCustomQty(cid, q){
+  q = Math.max(0, Math.min(100000, Math.round(Number(q) || 0)));
+  if (!q) return removeCustom(cid);
+  const x = customs.find(k => k.cid === cid); if (x) { x.qty = q; saveCustoms(); refreshCart(); }
+}
+function removeCustom(cid){
+  if (!confirm('Удалить позицию по своему дизайну (вместе с разработкой дизайна)?')) return;
+  customs = customs.filter(k => k.cid !== cid); saveCustoms(); refreshCart();
+}
+function openCustomModal(){
+  $('.cmodal')?.remove();
+  const cats = CATS.slice(1), defQty = isRetail() ? 1 : 100;
+  const d = document.createElement('div'); d.className = 'cmodal'; d.setAttribute('role', 'dialog'); d.setAttribute('aria-modal', 'true'); d.setAttribute('aria-label', 'Позиция по своему дизайну');
+  d.innerHTML = `<form class="card form cmodal-box" novalidate>
+    <button type="button" class="icon-btn cmodal-x" data-cmclose aria-label="Закрыть">✕</button>
+    <h3>🎨 Позиция по своему дизайну</h3>
+    <p class="muted cm-lead">Сделаем изделие с вашим рисунком. Цена — как у изделий каталога (${esc(MODE_NAME[mode] || 'Опт')}), плюс разово <b>${money(Number(CFG.designFee) || 0)}</b> за разработку дизайна. Под заказ, ${esc(CFG.madeToOrderLead)}.</p>
+    <div class="cm-label">Изделие *</div>
+    <div class="cm-cats">${cats.map((k, i) => `<label class="cm-cat"><input type="radio" name="cmCat" value="${k.id}" ${i === 0 ? 'checked' : ''}><span><b>${esc(k.one.replace(' (комплект 2 шт)', ''))}</b><small>${money(catPrice(k.id))} / ${k.id === 'earrings' ? 'компл.' : 'шт'}</small></span></label>`).join('')}</div>
+    <label>Количество *<div class="stepper cm-stepper"><button type="button" data-cmstep="-1">−</button><input type="number" name="cmQty" min="1" value="${defQty}" inputmode="numeric"><button type="button" data-cmstep="1">+</button></div></label>
+    <label>Что изобразить *<textarea name="cmDesc" rows="3" maxlength="400" required placeholder="Например: логотип нашей кофейни, круглый, 3 цвета; надпись «Павловск 2026»"></textarea></label>
+    <label>Ссылка на картинку или пометка о файле<input name="cmLink" maxlength="300" placeholder="https://… или «пришлю файл в Telegram»"></label>
+    <div class="cm-calc" aria-live="polite"></div>
+    <div class="form-error" data-cmerr></div>
+    <div class="cm-actions"><button type="submit" class="btn primary">В корзину</button><button type="button" class="btn ghost" data-cmclose>Отмена</button></div>
+  </form>`;
+  document.body.appendChild(d);
+  const f = $('form', d), qi = f.elements.cmQty;
+  const upd = () => {
+    const cat = (f.querySelector('input[name=cmCat]:checked') || {}).value || 'keychains', q = Math.max(0, Math.round(Number(qi.value) || 0)), pr = catPrice(cat), fee = Number(CFG.designFee) || 0;
+    $('.cm-calc', d).innerHTML = `${num(q)} × ${money(pr)} = <b>${money(r2(q * pr))}</b> + разработка дизайна <b>${money(fee)}</b>${isRetail() ? '' : ' <span class="muted">· скидка от тиража считается в корзине на изделия</span>'}`;
+  };
+  f.addEventListener('input', upd); f.addEventListener('change', upd); upd();
+  d.addEventListener('click', e => {
+    if (e.target === d || e.target.closest('[data-cmclose]')) return d.remove();
+    const st = e.target.closest('[data-cmstep]'); if (st) { qi.value = Math.max(1, (Math.round(Number(qi.value) || 0)) + Number(st.dataset.cmstep) * qStep()); upd(); }
+  });
+  f.addEventListener('submit', e => {
+    e.preventDefault();
+    const cat = (f.querySelector('input[name=cmCat]:checked') || {}).value, q = Math.round(Number(qi.value) || 0), desc = f.elements.cmDesc.value.trim(), link = f.elements.cmLink.value.trim();
+    f.elements.cmDesc.classList.toggle('invalid', !desc); qi.classList.toggle('invalid', q < 1);
+    if (!cat || q < 1 || !desc) { $('[data-cmerr]', d).textContent = !desc ? 'Опишите, что изобразить' : 'Укажите количество'; return; }
+    customs.push({cid: Date.now().toString(36) + Math.random().toString(36).slice(2, 5), category: cat, qty: q, desc: desc.slice(0, 400), link: link.slice(0, 300)});
+    saveCustoms(); refreshCart(); d.remove(); openDrawer(); toast('Позиция по своему дизайну добавлена');
+  });
+  setTimeout(() => f.elements.cmDesc.focus(), 50);
 }
 function openDrawer(){ $('#drawer').classList.add('open'); $('#overlay').hidden = false; $('#drawer').setAttribute('aria-hidden','false'); }
 function closeDrawer(){ $('#drawer').classList.remove('open'); $('#overlay').hidden = true; $('#drawer').setAttribute('aria-hidden','true'); }
@@ -571,16 +660,27 @@ function updateSubmitState(c){
 
 // ---------- checkout ----------
 function summaryTable(lines){
-  const row = l => `<tr><td>${esc(l.name)} <span class="muted">· ${esc(l.categoryName)}</span>${l.availability==='частично в наличии' ? `<br><span class="stock order">${num(l.inStockQty)} в наличии + ${num(l.madeToOrderQty)} под заказ</span>` : ''}</td><td class="r">${num(l.qty)}</td><td class="r">${money(l.unitPrice)}</td><td class="r">${money(l.sum)}</td></tr>`;
-  const inS = lines.filter(l => !l.madeToOrderQty), ord = lines.filter(l => l.madeToOrderQty);
+  const row = l => `<tr><td>${esc(l.name)} <span class="muted">· ${esc(l.categoryName)}</span>${l.availability==='частично в наличии' ? `<br><span class="stock order">${num(l.inStockQty)} в наличии + ${num(l.madeToOrderQty)} под заказ</span>` : ''}${l.custom ? `<br><span class="stock order">свой дизайн, под заказ</span>${l.link ? ` <span class="muted">📎 ${esc(shortDesc(l.link))}</span>` : ''}` : ''}</td><td class="r">${num(l.qty)}</td><td class="r">${money(l.unitPrice)}</td><td class="r">${money(l.sum)}</td></tr>`;
+  const inS = lines.filter(l => !l.fee && !l.madeToOrderQty), ord = lines.filter(l => !l.fee && l.madeToOrderQty), fees = lines.filter(l => l.fee);
   const grp = (title, arr) => arr.length ? `<tr class="sum-group"><td colspan="4">${title} · ${arr.length} поз., ${num(arr.reduce((a,l)=>a+l.qty,0))} шт</td></tr>` + arr.map(row).join('') : '';
+  const grpFee = arr => arr.length ? `<tr class="sum-group"><td colspan="4">✏️ Разработка дизайна · разово, без скидки</td></tr>` + arr.map(row).join('') : '';
   return `<div class="sum-scroll"><table class="sum-table"><thead><tr><th>Позиция</th><th class="r">Кол-во</th><th class="r">Цена</th><th class="r">Сумма</th></tr></thead><tbody>
-    ${grp('✅ В наличии — отгрузка со склада', inS)}${grp(`🛠 Под заказ — изготовление ${esc(CFG.madeToOrderLead)}`, ord)}
+    ${grp('✅ В наличии — отгрузка со склада', inS)}${grp(`🛠 Под заказ — изготовление ${esc(CFG.madeToOrderLead)}`, ord)}${grpFee(fees)}
   </tbody></table></div>`;
 }
 function orderLines(c){
-  return c.lines.map(l => ({id:l.p.id, name:l.p.name, category:l.p.category, categoryName:CATS.find(x=>x.id===l.p.category).one,
+  const cat = l => l.p.category;
+  const prod = c.lines.map(l => ({id:l.p.id, name:l.p.name, category:cat(l), categoryName:CATS.find(x=>x.id===cat(l)).one,
     unit:l.p.unit, qty:l.qty, basePrice:l.base, unitPrice:l.unitPrice, sum:l.sum, image:l.p.image, twoClasp: !!l.p.twoClasp, ...availability(l.p, l.qty)}));
+  // свой дизайн: изделие (под заказ, без брони) + отдельная строка «Разработка дизайна»
+  const own = (c.custom || []).flatMap(l => {
+    const cn = CATS.find(x => x.id === l.category).one, label = customLabel(l), id = 'custom-' + l.cid;
+    return [{id, custom:true, name:label, description:l.desc, link:l.link || '', category:l.category, categoryName:cn, unit:customUnit(l.category), qty:l.qty,
+        basePrice:l.base, unitPrice:l.unitPrice, sum:l.sum, image:'', twoClasp:false, stock:null, inStockQty:0, madeToOrderQty:l.qty, availability:'свой дизайн, под заказ'},
+      {id:'design-fee-' + l.cid, fee:true, forItem:id, name:'Разработка дизайна — ' + label, category:'service', categoryName:'услуга', unit:'услуга', qty:1,
+        basePrice:c.designFee, unitPrice:c.designFee, sum:c.designFee, image:'', twoClasp:false, stock:null, inStockQty:0, madeToOrderQty:0, availability:'услуга, разово'}];
+  });
+  return prod.concat(own);
 }
 function availability(p, qty){
   const s = stockSplit(p, qty);
@@ -600,7 +700,7 @@ function renderCheckoutSummary(){
   const pmId = selectedPm();
   const c = calc(cart, pmId);
   $$('.payer-legal').forEach(e => e.hidden = !(pmId === 'ooo' || pmId === 'ip'));
-  $('#checkoutSummary').innerHTML = `<h3>Состав заказа</h3>` + (c.lines.length ? summaryTable(orderLines(c)) : '<p class="muted">Корзина пуста.</p>') +
+  $('#checkoutSummary').innerHTML = `<h3>Состав заказа</h3>` + (c.count ? summaryTable(orderLines(c)) : '<p class="muted">Корзина пуста.</p>') +
     progressHTML(c) + '<br>' + totalsHTML(c) +
     (!pmId ? `<div class="hint-box">Выберите способ оплаты — итог пересчитается, после отправки сразу сформируется счёт.</div>` : '') +
     (c.lines.some(l => stockSplit(l.p, l.qty).inStock) ? `<div class="hint-box">🔒 Позиции из наличия будут забронированы на ${CFG.reservationDays||1} день — до ${ddmm(reservationUntil())} включительно. Если оплата не поступит, бронь снимается.</div>` : '') +
@@ -701,7 +801,7 @@ function bindOrderForm(){
         acceptedAt:now.toISOString(), docsVersion:(CFG.legalDocs || {}).version || '', docs:['consent.html','privacy.html','terms.html']},
       payment:{id:pm.id, label:pm.label, legalName:pm.legalName, markupRate:c.markupRate, markupLabel:pm.markupLabel||''},
       invoice:{number:nextInvoiceNo(now), date:now.toISOString(), payUntil:until.toISOString()},
-      items, totals:{totalQty:c.totalQty, discountPercent:c.disc, subtotal:c.subtotal, discount:c.discountSum, total:c.total,
+      items, totals:{totalQty:c.totalQty, discountPercent:c.disc, subtotal:c.subtotal, discount:c.discountSum, designFees:c.designFees, total:c.total,
         markupRate:c.markupRate, markup:c.markup, grand:c.grand, currency:'RUB'},
       reservation:{status:'бронь', expiresAt:until.toISOString(),
         lines: items.filter(i => i.inStockQty > 0).map(i => ({productId:i.id, productName:i.name, category:i.category, qty:i.inStockQty, stockRows: BY_ID[i.id].stockRows || []}))},
@@ -714,7 +814,7 @@ function bindOrderForm(){
     addHistory(order);
     pushToSheet(order);
     const w = openInvoice(order); // печатная форма счёта открывается автоматически
-    cart = {}; save(LS_CART, cart); refreshCart(); renderGrid(); f.reset();
+    cart = {}; save(LS_CART, cart); customs = []; saveCustoms(); refreshCart(); renderGrid(); f.reset();
     $$('[data-touched]', f).forEach(i => delete i.dataset.touched); updateDeliveryFields(); renderCheckoutSummary();
     showSuccess(order, !w);
   });
@@ -798,12 +898,12 @@ function invoiceHTML(o){
     [pm.fullName || pm.legalName, pm.inn && 'ИНН ' + pm.inn, pm.kpp && 'КПП ' + pm.kpp, pm.ogrnip && 'ОГРНИП ' + pm.ogrnip, pm.address, pm.phone && 'тел. ' + pm.phone].filter(Boolean).map(e).join(', ');
   const c = o.contact;
   const buyer = [c.company || c.name, c.inn && 'ИНН ' + c.inn, c.requisites, c.city, c.phone && 'тел. ' + c.phone, c.email].filter(Boolean).map(e).join(', ');
-  const rows = o.items.map((i, n) => `<tr><td class="c">${n+1}</td><td>${e(i.name)} — ${e(i.categoryName)}${i.madeToOrderQty ? `<br><small>${i.inStockQty ? num(i.inStockQty) + ' из наличия, ' : ''}${num(i.madeToOrderQty)} под заказ (${e(CFG.madeToOrderLead)})</small>` : ''}</td><td class="r">${num(i.qty)}</td><td class="c">${i.unit === 'комплект' ? 'компл.' : 'шт'}</td><td class="r">${m2(i.unitPrice)}</td><td class="r">${m2(i.sum)}</td></tr>`).join('');
+  const rows = o.items.map((i, n) => `<tr><td class="c">${n+1}</td><td>${e(i.name)} — ${e(i.categoryName)}${i.custom ? `<br><small>свой дизайн, под заказ (${e(CFG.madeToOrderLead)})${i.description && i.description.length > 57 ? ': ' + e(i.description) : ''}</small>` : i.fee ? '<br><small>разово, скидка от тиража не применяется</small>' : i.madeToOrderQty ? `<br><small>${i.inStockQty ? num(i.inStockQty) + ' из наличия, ' : ''}${num(i.madeToOrderQty)} под заказ (${e(CFG.madeToOrderLead)})</small>` : ''}</td><td class="r">${num(i.qty)}</td><td class="c">${i.unit === 'комплект' ? 'компл.' : i.unit === 'услуга' ? 'усл.' : 'шт'}</td><td class="r">${m2(i.unitPrice)}</td><td class="r">${m2(i.sum)}</td></tr>`).join('');
   let totals;
   if (pm.id === 'ooo') totals = `<tr><td>Итого без НДС:</td><td>${m2(t.total)}</td></tr><tr><td>НДС ${Math.round((pm.vatRate||t.markupRate)*100)}%:</td><td>${m2(t.markup)}</td></tr><tr class="b"><td>Всего к оплате (в т.ч. НДС ${Math.round((pm.vatRate||t.markupRate)*100)}%):</td><td>${m2(t.grand)}</td></tr>`;
   else if (pm.id === 'ip') totals = `<tr><td>Итого за товары:</td><td>${m2(t.total)}</td></tr><tr><td>${e(pm.markupLabel || 'Надбавка ' + Math.round(t.markupRate*100) + '%')}:</td><td>${m2(t.markup)}</td></tr><tr><td>НДС:</td><td>Не облагается</td></tr><tr class="b"><td>Всего к оплате:</td><td>${m2(t.grand)}</td></tr>`;
   else totals = `<tr><td>Итого:</td><td>${m2(t.total)}</td></tr><tr><td>Без НДС</td><td>—</td></tr><tr class="b"><td>Всего к оплате:</td><td>${m2(t.grand)}</td></tr>`;
-  const discount = t.discountPercent ? `<p class="small">Применена скидка от тиража ${t.discountPercent}% (−${m2(t.discount)} ₽), цены в таблице указаны со скидкой.</p>` : '';
+  const discount = t.discountPercent ? `<p class="small">Применена скидка от тиража ${t.discountPercent}% (−${m2(t.discount)} ₽), цены изделий в таблице указаны со скидкой${t.designFees ? '; на разработку дизайна скидка не действует' : ''}.</p>` : '';
   const resLines = (o.reservation && o.reservation.lines) || [];
   return `<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>Счёт № ${e(o.invoice.number)}</title><style>
   body{font:13px/1.4 Arial,Helvetica,sans-serif;color:#000;background:#fff;max-width:800px;margin:20px auto;padding:0 16px}
@@ -868,7 +968,7 @@ function toCSV(o){
     if (o.payment){ kv('Режим', o.modeName); kv('Способ оплаты', o.payment.label); kv('Получатель', o.payment.legalName); kv('Счёт №', o.invoice.number); kv('Бронь до', new Date(o.reservation.expiresAt).toLocaleString('ru-RU')); if (o.contact.inn) kv('ИНН покупателя', o.contact.inn); }
     rows.push([]);
     rows.push(['Артикул','Наименование','Тип','Ед.','Кол-во','Наличие','Из наличия','Под заказ','Цена базовая, ₽','Цена со скидкой, ₽','Сумма, ₽']);
-    o.items.forEach(i => rows.push([i.id, i.name, i.categoryName, i.unit, i.qty, i.availability||'', i.inStockQty??'', i.madeToOrderQty??'', i.basePrice, i.unitPrice, i.sum]));
+    o.items.forEach(i => rows.push([i.id, i.name + (i.custom && i.description ? ' — ' + i.description : '') + (i.custom && i.link ? ' (референс: ' + i.link + ')' : ''), i.categoryName, i.unit, i.qty, i.availability||'', i.inStockQty??'', i.madeToOrderQty??'', i.basePrice, i.unitPrice, i.sum]));
     rows.push([]); kv('Всего изделий', o.totals.totalQty); kv('Сумма без скидки, ₽', o.totals.subtotal); kv('Скидка, %', o.totals.discountPercent); kv('Скидка, ₽', o.totals.discount); kv('Итого, ₽', o.totals.total);
     if (o.payment){ kv((o.payment.markupLabel || 'Надбавка') + ', ₽', o.totals.markup); kv('К оплате, ₽', o.totals.grand); }
   } else {
@@ -1044,7 +1144,10 @@ function parseCSV(t){
 async function loadRemoteReservations(){
   if (!/^https?:/.test(location.protocol)) return;
   try {
-    if (CFG.appsScriptUrl) { const r = await fetch(CFG.appsScriptUrl + '?action=reservations'); const j = await r.json(); resRemote = j.reservations || []; }
+    if (CFG.appsScriptUrl) { const r = await fetch(CFG.appsScriptUrl + '?action=reservations'); const j = await r.json(); resRemote = j.reservations || [];
+      // таблица — источник правды: брони этого браузера, которых в таблице нет (сняты/удалены), забываем; свежие (<15 мин) оставляем, пока заказ доходит до таблицы
+      const ids = new Set(resRemote.map(x => x.orderId)), fresh = Date.now() - 15 * 60000;
+      save(LS_RES, load(LS_RES, []).filter(x => ids.has(x.orderId) || new Date(x.dateIssued).getTime() > fresh)); }
     else if (CFG.reservationsCsvUrl) { const r = await fetch(CFG.reservationsCsvUrl); resRemote = parseCSV(await r.text()).map(x => ({...x, qty: Number(x.qty)})); }
     else return;
     resetRes(); renderGrid(); refreshCart();
