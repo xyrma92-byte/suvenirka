@@ -221,6 +221,8 @@ fieldset.checks label{margin:4px 0}
 .contact-btn.wa{background:#25D366;color:#fff}
 .contact-btn.mail{background:#4a5568}
 .contact-btn.phone{background:#2a2e39;color:var(--text);border:1px solid var(--line)}
+.contact-btn.ozon{background:#005BFF;color:#fff}
+.contact-btns-header .ozon-extra{display:none}
 .contact-btns-header{flex-shrink:0}
 .contact-btns-header .contact-btn{min-height:36px;padding:6px 12px;font-size:13px}
 .contact-btns-footer{margin-top:12px}
@@ -228,7 +230,7 @@ fieldset.checks label{margin:4px 0}
 .contact-btns-footer .contact-btn svg,.contact-btns-success .contact-btn svg{width:22px;height:22px}
 .contact-btns-success{margin:16px 0 8px}
 .success-contacts-label{margin:16px 0 0}
-@media(max-width:1400px){
+@media(max-width:1680px){
   .contact-btns-header .contact-btn span{display:none}
   .contact-btns-header .contact-btn{width:40px;height:40px;min-height:40px;min-width:40px;padding:0;border-radius:12px}
   .contact-btns-header .contact-btn svg{width:20px;height:20px}
@@ -239,4 +241,5 @@ fieldset.checks label{margin:4px 0}
   .mode-btn{order:2;margin-left:auto;margin-right:0}
   .cart-btn{order:3;margin-left:0}
   .contact-btns-footer .contact-btn,.contact-btns-success .contact-btn{flex:1 1 calc(50% - 8px);min-height:48px}
+  .contact-btns-footer .contact-btn.ozon,.contact-btns-success .contact-btn.ozon{flex:1 1 100%}
 }

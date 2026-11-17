@@ -6,6 +6,7 @@ window.SITE_CONFIG = {
   email: "iptns@mail.ru",               // Почта для заявок (используется в ссылке mailto)
   telegram: "https://t.me/+79643426967",
   whatsapp: "https://wa.me/79643426967",
+  ozon: "https://ozon.ru/s/ip-taran-2983954",
   city: "Россия",
 
   minOrderQty: 500,                     // Минимальный заказ, шт (суммарно, можно микс)
