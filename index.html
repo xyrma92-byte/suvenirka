@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Рок-мерч — брелоки, значки, магниты, серьги оптом и в розницу | Производство в России</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E%E2%98%85%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar">
+  <a href="#home" class="logo"><span class="logo-mark">★</span> <span id="brandName">Сувенирка</span></a>
+  <nav class="nav">
+    <a href="#home" data-nav="home">Главная</a>
+    <a href="#catalog" data-nav="catalog">Каталог</a>
+    <a href="#custom" data-nav="custom">Индивидуальный дизайн</a>
+    <a href="#history" data-nav="history">Мои заявки</a>
+  </nav>
+  <div class="contact-btns contact-btns-header" id="headerContacts"></div>
+  <button class="mode-btn" id="modeBtn" type="button" title="Сменить режим">Режим: <b id="modeLabel">—</b> ⇄</button>
+  <button class="cart-btn" id="cartBtn" aria-label="Корзина">
+    🛒 <span class="cart-btn-label">Заявка</span> <b id="cartCount">0</b><small id="cartCountUnit">шт</small>
+  </button>
+</header>
+
+<!-- ===== MODE GATE ===== -->
+<div class="mode-gate" id="modeGate" hidden>
+  <div class="mode-gate-inner">
+    <div class="logo-mark big">★</div>
+    <h1>Как вы покупаете?</h1>
+    <p class="muted">Выберите вариант — цены и условия на сайте подстроятся. Сменить можно в любой момент кнопкой «Режим» вверху.</p>
+    <div class="mode-buttons">
+      <button class="mode-choice" data-mode="wholesale" type="button"><span class="mode-ico">📦</span><b>Опт</b><span>Для магазинов и юрлиц: от 500 шт миксом, скидки до −15% от тиража</span></button>
+      <button class="mode-choice" data-mode="retail" type="button"><span class="mode-ico">🛍</span><b>Розница</b><span>Для физлиц: любое количество, все изделия по 600 ₽, серьги — 1 200 ₽ комплект</span></button>
+    </div>
+  </div>
+</div>
+
+<main>
+<!-- ===== HOME ===== -->
+<section class="view" id="view-home">
+  <div class="hero">
+    <div class="hero-text">
+      <span class="badge">🇷🇺 Производство в России</span>
+      <h1 data-only="wholesale">Мерч для вашего магазина — <span class="accent">оптом от 500 шт</span></h1>
+      <h1 data-only="retail">Рок-мерч для себя и в подарок — <span class="accent">от 1 штуки</span></h1>
+      <p class="lead">Готовая рок-линейка: <b>438 дизайнов</b> брелоков, значков, магнитов и серёжек. А ещё делаем дизайны под <b>любое направление</b>: кино, игры, аниме, комиксы, бренды и ваши собственные идеи.</p>
+      <div class="hero-cta">
+        <a class="btn primary" href="#catalog">Выбрать из каталога</a>
+        <a class="btn ghost" href="#custom">Заказать свой дизайн</a>
+      </div>
+      <ul class="hero-facts" data-only="wholesale">
+        <li><b>500 шт</b> минимальный заказ — можно миксом разных позиций</li>
+        <li><b>до −15%</b> скидка от тиража</li>
+        <li><b>4 вида</b> изделий</li>
+      </ul>
+      <ul class="hero-facts" data-only="retail">
+        <li><b id="retailPriceTxt">600 ₽</b> любой брелок, значок или магнит</li>
+        <li><b id="retailEarTxt">1 200 ₽</b> серьги, комплект</li>
+        <li><b>от 1 шт</b> без минимального заказа</li>
+      </ul>
+    </div>
+    <div class="hero-collage" id="heroCollage"></div>
+  </div>
+
+  <h2 class="section-title" id="unitPriceHead">Цены (тираж 500–999 шт)</h2>
+  <div class="price-cards" id="priceCards"></div>
+
+  <div data-only="wholesale"><h2 class="section-title">Скидки от суммарного тиража</h2>
+  <div class="tiers" id="tiersHome"></div></div>
+
+  <h2 class="section-title">Как оформить заявку</h2>
+  <ol class="steps">
+    <li><b>Выберите позиции</b> в каталоге и укажите количество.</li>
+    <li data-only="wholesale"><b>Наберите от 500 шт</b> суммарно — скидка считается автоматически.</li>
+    <li><b>Выберите способ оплаты</b> — ООО с НДС, ИП без НДС или перевод на карту.</li>
+    <li><b>Получите счёт сразу</b> — товар из наличия бронируется на 1 день до оплаты.</li>
+  </ol>
+  <div class="custom-banner">
+    <div>
+      <h3>Нужно не про рок?</h3>
+      <p>Разработаем дизайн под вашу тематику — фильм, игру, аниме, бренд, город, событие. Те же изделия, те же цены и скидки от тиража.</p>
+    </div>
+    <a class="btn primary" href="#custom">Оставить заявку на дизайн</a>
+  </div>
+</section>
+
+<!-- ===== CATALOG ===== -->
+<section class="view" id="view-catalog" hidden>
+  <div class="catalog-head">
+    <h1>Каталог</h1>
+    <div class="catalog-tools">
+      <input type="search" id="search" placeholder="Поиск по названию: Metallica, Ария…" autocomplete="off">
+      <label class="stock-filter"><input type="checkbox" id="onlyStock"> Только в наличии</label>
+    </div>
+  </div>
+  <div class="tabs" id="tabs"></div>
+  <div class="mini-progress" id="miniProgress"></div>
+  <div class="grid" id="grid"></div>
+  <p class="empty" id="gridEmpty" hidden>Ничего не найдено. Не нашли нужную группу? <a href="#custom">Закажите дизайн</a> — сделаем.</p>
+</section>
+
+<!-- ===== CHECKOUT ===== -->
+<section class="view" id="view-checkout" hidden>
+  <h1>Оформление заявки</h1>
+  <div class="checkout-layout">
+    <form id="orderForm" class="card form" novalidate>
+      <h3>Контактные данные</h3>
+      <label>Имя *<input name="name" required autocomplete="name"></label>
+      <label>Телефон *<input name="phone" type="tel" required autocomplete="tel" placeholder="+7 900 000-00-00"></label>
+      <label>Email *<input name="email" type="email" required autocomplete="email"></label>
+      <label>Компания / магазин<input name="company" autocomplete="organization"></label>
+      <label>Город доставки<input name="city"></label>
+      <fieldset class="pay-fieldset">
+        <legend>Способ оплаты *</legend>
+        <div class="pay-options" id="payOptions"></div>
+      </fieldset>
+      <div class="payer-legal" hidden>
+        <label>ИНН покупателя<input name="payerInn" inputmode="numeric" placeholder="Для счёта на организацию / ИП"></label>
+        <label>Реквизиты покупателя<input name="payerReq" placeholder="Полное название, КПП, юр. адрес"></label>
+      </div>
+      <label>Комментарий<textarea name="comment" rows="3" placeholder="Сроки, доставка, пожелания"></textarea></label>
+      <label class="check"><input type="checkbox" name="consent" required> Согласен(на) на обработку персональных данных для связи по заявке</label>
+      <div class="form-error" id="orderError"></div>
+      <button class="btn primary big" type="submit" id="orderSubmit">Отправить заявку и получить счёт</button>
+      <a href="#catalog" class="btn ghost">← Вернуться в каталог</a>
+    </form>
+    <div class="card" id="checkoutSummary"></div>
+  </div>
+</section>
+
+<!-- ===== CUSTOM ===== -->
+<section class="view" id="view-custom" hidden>
+  <h1>Индивидуальный дизайн</h1>
+  <p class="lead">Сделаем брелоки, значки, магниты и серьги под любую тематику: кино, сериалы, игры, аниме, комиксы, бренды, мероприятия. Цены на изделия — как в каталоге<span data-only="wholesale">, минимальный тираж от 500 шт</span>.</p>
+  <div class="fee-banner">
+    <div><span class="muted">Разработка дизайна</span><b><span class="designFee"></span> за 1 дизайн</b></div>
+    <div class="muted">Изготовление — по ценам каталога<span data-only="wholesale">, от 500 шт</span> · срок <span class="leadTime"></span></div>
+  </div>
+  <form id="customForm" class="card form" novalidate>
+    <div class="upload-zone" id="uploadZone">
+      <div class="upload-icon">🎨</div>
+      <h3>Загрузите свои варианты дизайна</h3>
+      <p class="muted">Эскизы, логотипы, референсы — можно несколько изображений сразу (JPG, PNG, WebP).</p>
+      <label class="btn primary upload-btn">📎 Выбрать файлы<input type="file" accept="image/*" multiple id="customFiles" hidden></label>
+      <small class="hint" id="fileHint">Или перетащите файлы сюда. Файлы до <span class="maxkb"></span> КБ попадут в файл заявки; все файлы приложите к письму, которое откроется после отправки.</small>
+      <div class="thumbs" id="fileList"></div>
+    </div>
+    <div class="form-grid">
+      <div>
+        <h3>О проекте</h3>
+        <label>Тематика / направление *
+          <input name="theme" required list="themeList" placeholder="Например: аниме, Marvel, игры Nintendo, свой бренд">
+          <datalist id="themeList">
+            <option>Кино и сериалы</option><option>Игры</option><option>Аниме и манга</option><option>Комиксы</option><option>Музыка</option><option>Бренд / корпоративный мерч</option><option>Город / туризм</option><option>Событие / фестиваль</option>
+          </datalist>
+        </label>
+        <label>Описание идеи *<textarea name="description" rows="5" required placeholder="Что изобразить, стиль, цвета, сколько дизайнов, есть ли готовые макеты"></textarea></label>
+        <fieldset class="checks">
+          <legend>Какие изделия интересны *</legend>
+          <label class="check"><input type="checkbox" name="types" value="Брелоки"> Брелоки</label>
+          <label class="check"><input type="checkbox" name="types" value="Значки"> Значки</label>
+          <label class="check"><input type="checkbox" name="types" value="Магниты"> Магниты</label>
+          <label class="check"><input type="checkbox" name="types" value="Серьги"> Серьги</label>
+          <label class="check"><input type="checkbox" name="types" value="Другое"> Другое</label>
+        </fieldset>
+        <label>Сколько дизайнов разработать
+          <input name="designs" type="number" min="1" step="1" value="1" id="designCount">
+        </label>
+        <div class="fee-calc" id="feeCalc"></div>
+        <label>Примерный тираж, шт
+          <input name="qty" type="number" min="0" step="50" placeholder="от 500">
+        </label>
+      </div>
+      <div>
+        <h3>Контакты</h3>
+        <label>Имя *<input name="name" required autocomplete="name"></label>
+        <label>Телефон *<input name="phone" type="tel" required autocomplete="tel" placeholder="+7 900 000-00-00"></label>
+        <label>Email *<input name="email" type="email" required autocomplete="email"></label>
+        <label>Компания / магазин<input name="company" autocomplete="organization"></label>
+        <label>Желаемый срок<input name="deadline" placeholder="Например: к 1 декабря"></label>
+        <label class="check"><input type="checkbox" name="consent" required> Согласен(на) на обработку персональных данных для связи по заявке</label>
+        <div class="form-error" id="customError"></div>
+        <button class="btn primary big" type="submit" id="customSubmit">✉ Отправить заявку на почту</button>
+        <small class="hint">После отправки откроется письмо на <b class="emailTo"></b> с готовым текстом заявки — приложите к нему свои файлы.</small>
+      </div>
+    </div>
+  </form>
+</section>
+
+<!-- ===== SUCCESS ===== -->
+<section class="view" id="view-success" hidden>
+  <div class="card success" id="successBox"></div>
+</section>
+
+<!-- ===== HISTORY ===== -->
+<section class="view" id="view-history" hidden>
+  <h1>Мои заявки</h1>
+  <p class="muted">Заявки хранятся только в этом браузере.</p>
+  <div id="historyList"></div>
+</section>
+</main>
+
+<!-- ===== CART DRAWER ===== -->
+<div class="overlay" id="overlay" hidden></div>
+<aside class="drawer" id="drawer" aria-hidden="true">
+  <div class="drawer-head">
+    <h2>Ваша заявка</h2>
+    <button class="icon-btn" id="drawerClose" aria-label="Закрыть">✕</button>
+  </div>
+  <div class="drawer-body" id="cartItems"></div>
+  <div class="drawer-foot" id="cartFoot"></div>
+</aside>
+
+<footer class="footer">
+  <div><b id="footCompany"></b><span id="footPerson"></span> · Производство в России</div>
+  <div id="footContacts"></div>
+</footer>
+
+<div class="toast" id="toast"></div>
+
+<script src="config.js"></script>
+<script src="products.js"></script>
+<script src="reservations.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
