@@ -11,6 +11,79 @@ const CATS = [
   {id:'earrings', name:'Серьги', one:'Серьги (комплект 2 шт)'}
 ];
 const CAT_NAME = Object.fromEntries(CATS.map(c => [c.id, c.name]));
+
+const FEATURED_BANDS = [
+  { slug:'kish', name:'Король и Шут', image:'images/pins/pins-126.jpg' },
+  { slug:'metallica', name:'Metallica', image:'images/pins/pins-067.jpg' },
+  { slug:'rammstein', name:'Rammstein', image:'images/pins/pins-090.jpg' },
+  { slug:'nirvana', name:'Nirvana', image:'images/pins/pins-077.jpg' },
+  { slug:'alisa', name:'Алиса', image:'images/pins/pins-118.jpg' },
+  { slug:'kino', name:'Кино (Цой)', image:'images/pins/pins-136.jpg' }
+];
+const EXTRA_ALIASES = {
+  kish:['киш','kish','korol-i-shut','король и шут','горшок'],
+  kino:['цой','кино','tsoi','tsoy','виктор цой'],
+  alisa:['алиса','alice'],
+  metallica:['metallica','металлика'],
+  rammstein:['rammstein','рамштайн','рамштейн'],
+  nirvana:['nirvana','нирвана'],
+  soad:['soad','system of a down'],
+  rhcp:['rhcp','red hot chili peppers'],
+  '5fdp':['5fdp','ffdp','five finger death punch'],
+  bmth:['bmth','bring me the horizon'],
+  acdc:['acdc','ac/dc','ac-dc'],
+  leningrad:['ленинград','в питере пить','shnur','шнор']
+};
+function bandNameOf(p){ return p.band || String(p.name||'').replace(/\s+лого$/i,'').replace(/\s+[1-9]$/,'').trim(); }
+function slugifyBand(name){
+  const o = {'Король и Шут':'kish','Кино (Цой)':'kino','Алиса':'alisa','AC/DC':'acdc',"Guns N' Roses":'guns-n-roses','Red Hot Chili Peppers':'rhcp','System of a Down':'soad','Five Finger Death Punch':'5fdp','Bring Me The Horizon':'bmth','The Beatles':'beatles','The Offspring':'offspring','The Exploited':'exploited','The Rolling Stones':'rolling-stones','The Prodigy':'prodigy','Mötley Crüe':'motley-crue','Motörhead':'motorhead','W.A.S.P.':'wasp','Чиж & Co':'chizh','Lindemann':'lindemann','Ленинград':'leningrad','21 Pilots':'21-pilots'};
+  if (o[name]) return o[name];
+  const tr = {'а':'a','б':'b','в':'v','г':'g','д':'d','е':'e','ё':'e','ж':'zh','з':'z','и':'i','й':'j','к':'k','л':'l','м':'m','н':'n','о':'o','п':'p','р':'r','с':'s','т':'t','у':'u','ф':'f','х':'h','ц':'c','ч':'ch','ш':'sh','щ':'sch','ъ':'','ы':'y','ь':'','э':'e','ю':'yu','я':'ya','ö':'o','ü':'u','ä':'a','&':'and','/':'-'};
+  return [...String(name).toLowerCase().replace(/ё/g,'е')].map(ch => tr[ch] ?? ch).join('').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'') || 'band';
+}
+function bandSlugOf(p){ return p.bandSlug || slugifyBand(bandNameOf(p)); }
+function bandSortKey(name){ return String(name).replace(/^The\s+/i,'').replace(/^[Ёё]/,'Е'); }
+function bandLetter(name){
+  const ch = bandSortKey(name).trim().charAt(0).toUpperCase();
+  if (/[0-9]/.test(ch)) return '#';
+  if (ch === 'Ё') return 'Е';
+  if (/[A-ZА-Я]/.test(ch)) return ch;
+  return '#';
+}
+function sortLetters(letters){
+  const az = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', ru = 'АБВГДЕЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ';
+  const rank = L => L === '#' ? '0' : az.includes(L) ? '1' + String(az.indexOf(L)).padStart(2,'0') : ru.includes(L) ? '2' + String(ru.indexOf(L)).padStart(2,'0') : '3'+L;
+  return [...letters].sort((a,b) => rank(a).localeCompare(rank(b)));
+}
+function collectBands(){
+  const map = new Map();
+  for (const p of PRODUCTS){
+    const name = bandNameOf(p), slug = bandSlugOf(p);
+    if (!map.has(slug)) map.set(slug, {name, slug, aliases:new Set([name, slug]), count:0});
+    const b = map.get(slug);
+    b.count++;
+    b.aliases.add(p.name);
+    (EXTRA_ALIASES[slug]||[]).forEach(a => b.aliases.add(a));
+  }
+  const list = [...map.values()].sort((a,b) => bandSortKey(a.name).localeCompare(bandSortKey(b.name), 'ru', {sensitivity:'base'}));
+  list.forEach(b => { b.aliases = [...b.aliases]; });
+  return list;
+}
+const BANDS = collectBands();
+const BAND_BY_SLUG = Object.fromEntries(BANDS.map(b => [b.slug, b]));
+function normBandQ(s){ return String(s||'').trim().toLowerCase().replace(/ё/g,'е'); }
+function resolveBandSlug(s){
+  if (!s) return '';
+  let raw; try { raw = decodeURIComponent(String(s)); } catch(e){ raw = String(s); }
+  const q = normBandQ(raw), dash = q.replace(/\s+/g,'-');
+  if (BAND_BY_SLUG[dash] || BAND_BY_SLUG[q]) return BAND_BY_SLUG[dash] ? dash : q;
+  for (const b of BANDS){
+    if (normBandQ(b.name) === q || b.slug === dash || b.slug === q) return b.slug;
+    if (b.aliases.some(a => normBandQ(a) === q || normBandQ(a).replace(/\s+/g,'-') === dash)) return b.slug;
+  }
+  return '';
+}
+
 const LS_CART = 'merch_cart_v1', LS_HIST = 'merch_orders_v1', LS_MODE = 'merch_mode_v1', LS_RES = 'merch_reservations_v1', LS_INVSEQ = 'merch_invoice_seq_v1';
 const PM = CFG.paymentMethods || {};
 let mode = (() => { try { const m = localStorage.getItem(LS_MODE); return m === 'retail' || m === 'wholesale' ? m : null; } catch(e){ return null; } })();
@@ -107,7 +180,7 @@ function calc(cart, pmId){
 // ---------- state ----------
 let cart = load(LS_CART, {});
 const pending = {}; // qty selected on cards not yet in cart
-let activeCat = 'all', query = '', onlyStock = false;
+let activeCat = 'all', query = '', onlyStock = false, activeBand = '', bandQuery = '';
 function load(k, d){ try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch(e){ return d; } }
 function save(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch(e){ console.warn(e); return false; } }
 function setQty(id, q){
@@ -157,10 +230,13 @@ function initStatic(){
   $$('.designFee').forEach(e => e.textContent = money(CFG.designFee));
   $$('.leadTime').forEach(e => e.textContent = CFG.madeToOrderLead);
   $$('.emailTo').forEach(e => e.textContent = CFG.email || 'нашу почту');
-  // collage
-  const pick = []; const step = Math.floor(PRODUCTS.length / 12) || 1;
-  for (let i = 0; i < PRODUCTS.length && pick.length < 12; i += step) pick.push(PRODUCTS[i]);
-  $('#heroCollage').innerHTML = pick.map(p => `<img src="${esc(p.image)}" alt="${esc(p.name)}" loading="lazy">`).join('');
+  // collage: six featured bands, each links to the catalog filtered by that band
+  $('#heroCollage').innerHTML = FEATURED_BANDS.map(b =>
+    `<a class="hero-band" href="#band=${encodeURIComponent(b.slug)}" title="${esc(b.name)}">
+      <img src="${esc(b.image)}" alt="${esc(b.name)}" width="400" height="400" loading="lazy">
+      <span>${esc(b.name)}</span>
+    </a>`
+  ).join('');
   // price cards
   $('#priceCards').innerHTML = CATS.slice(1).map(c => {
     const p = PRODUCTS.find(x => x.category === c.id); const cnt = PRODUCTS.filter(x => x.category === c.id).length;
@@ -175,14 +251,91 @@ function initStatic(){
 
 // ---------- catalog ----------
 function renderTabs(){
+  const pool = PRODUCTS.filter(p => (!activeBand || bandSlugOf(p) === activeBand));
   $('#tabs').innerHTML = CATS.map(c => {
-    const n = c.id === 'all' ? PRODUCTS.length : PRODUCTS.filter(p => p.category === c.id).length;
+    const n = c.id === 'all' ? pool.length : pool.filter(p => p.category === c.id).length;
     return `<button class="tab ${c.id===activeCat?'active':''}" data-cat="${c.id}">${c.name}<small>${n}</small></button>`;
   }).join('');
 }
 function filtered(){
   const q = query.trim().toLowerCase().replace(/ё/g,'е');
-  return PRODUCTS.filter(p => (activeCat === 'all' || p.category === activeCat) && (!onlyStock || available(p) > 0) && (!q || p.name.toLowerCase().replace(/ё/g,'е').includes(q)));
+  return PRODUCTS.filter(p => (activeCat === 'all' || p.category === activeCat)
+    && (!activeBand || bandSlugOf(p) === activeBand)
+    && (!onlyStock || available(p) > 0)
+    && (!q || p.name.toLowerCase().replace(/ё/g,'е').includes(q) || bandNameOf(p).toLowerCase().replace(/ё/g,'е').includes(q)));
+}
+function catalogTitle(){
+  const el = $('#catalogTitle'); if (!el) return;
+  const b = BAND_BY_SLUG[activeBand];
+  el.textContent = b ? ('Каталог · ' + b.name) : 'Каталог';
+}
+function visibleBands(){
+  const q = normBandQ(bandQuery);
+  if (!q) return BANDS;
+  return BANDS.filter(b => [b.name, b.slug, ...b.aliases].some(a => normBandQ(a).includes(q) || normBandQ(a).replace(/-/g,' ').includes(q)));
+}
+function chipHTML(b){
+  return `<button type="button" class="band-chip ${b.slug===activeBand?'active':''}" data-band="${esc(b.slug)}">${esc(b.name)}<small>${b.count}</small></button>`;
+}
+function renderBandIndex(){
+  const root = $('#bandIndex'); if (!root) return;
+  const list = visibleBands();
+  const allBtn = $('#bandAll'); if (allBtn) allBtn.classList.toggle('active', !activeBand);
+  const lab = $('#bandActiveLabel');
+  if (lab){
+    const b = BAND_BY_SLUG[activeBand];
+    lab.hidden = !b;
+    if (b) lab.textContent = b.name + ' · ' + b.count;
+  }
+  const total = $('#bandTotal'); if (total) total.textContent = String(BANDS.length);
+  catalogTitle();
+  const groups = new Map();
+  for (const b of list){
+    const L = bandLetter(b.name);
+    if (!groups.has(L)) groups.set(L, []);
+    groups.get(L).push(b);
+  }
+  const order = sortLetters([...groups.keys()]);
+  const letters = $('#bandLetters');
+  if (letters) letters.innerHTML = order.map(L => `<button type="button" data-jump="${esc(L)}" aria-label="Буква ${esc(L)}">${esc(L)}</button>`).join('');
+  const scroller = $('#bandScroller');
+  if (scroller) scroller.innerHTML = list.map(chipHTML).join('');
+  const body = $('#bandIndexBody');
+  if (body) body.innerHTML = list.length
+    ? order.map(L => `<div class="band-letter" data-letter="${esc(L)}"><div class="band-letter-key">${esc(L)}</div><div class="band-letter-chips">${groups.get(L).map(chipHTML).join('')}</div></div>`).join('')
+    : '<p class="band-empty">Нет групп по запросу. Попробуйте другое название или сбросьте фильтр.</p>';
+}
+function setBand(slug){
+  activeBand = resolveBandSlug(slug);
+  const hash = activeBand ? '#band=' + encodeURIComponent(activeBand) : '#catalog';
+  if (location.hash !== hash) location.hash = hash;
+  else { renderBandIndex(); renderTabs(); renderGrid(); }
+}
+function bindBandIndex(){
+  const root = $('#bandIndex'); if (!root) return;
+  $('#bandToggle')?.addEventListener('click', () => {
+    const open = !root.classList.contains('open');
+    root.classList.toggle('open', open);
+    $('#bandToggle').setAttribute('aria-expanded', open ? 'true' : 'false');
+  });
+  let t;
+  $('#bandSearch')?.addEventListener('input', e => {
+    clearTimeout(t);
+    t = setTimeout(() => { bandQuery = e.target.value; renderBandIndex(); }, 80);
+  });
+  root.addEventListener('click', e => {
+    const jump = e.target.closest('[data-jump]');
+    if (jump){
+      root.classList.add('open');
+      $('#bandToggle')?.setAttribute('aria-expanded','true');
+      const row = root.querySelector('.band-letter[data-letter="' + CSS.escape(jump.dataset.jump) + '"]');
+      if (row) row.scrollIntoView({block:'nearest', behavior:'smooth'});
+      return;
+    }
+    const chip = e.target.closest('[data-band]');
+    if (!chip) return;
+    setBand(chip.dataset.band || '');
+  });
 }
 function cardHTML(p){
   const inCart = cart[p.id] > 0;
@@ -207,7 +360,14 @@ function cardHTML(p){
 function renderGrid(){
   const list = filtered();
   $('#grid').innerHTML = list.map(cardHTML).join('');
-  $('#gridEmpty').hidden = list.length > 0;
+  const empty = $('#gridEmpty');
+  empty.hidden = list.length > 0;
+  if (!list.length){
+    const b = BAND_BY_SLUG[activeBand];
+    empty.innerHTML = b
+      ? `В группе «${esc(b.name)}» ничего не найдено. <button type="button" class="linkish" data-band="">Все группы</button> или <a href="#custom">закажите дизайн</a>.`
+      : 'Ничего не найдено. Не нашли нужную группу? <a href="#custom">Закажите дизайн</a> — сделаем.';
+  }
 }
 function refreshCard(id){
   const el = $(`.item[data-id="${id}"]`);
@@ -235,6 +395,7 @@ function bindGrid(){
   $('#tabs').addEventListener('click', e => { const b = e.target.closest('[data-cat]'); if (!b) return; activeCat = b.dataset.cat; renderTabs(); renderGrid(); });
   $('#onlyStock').addEventListener('change', e => { onlyStock = e.target.checked; renderGrid(); });
   let t; $('#search').addEventListener('input', e => { clearTimeout(t); t = setTimeout(() => { query = e.target.value; renderGrid(); }, 120); });
+  $('#gridEmpty').addEventListener('click', e => { const b = e.target.closest('[data-band]'); if (b) setBand(b.dataset.band || ''); });
 }
 function zoom(p){
   const d = document.createElement('div'); d.className = 'lightbox';
@@ -645,16 +806,43 @@ function renderHistory(){
 }
 
 // ---------- routing ----------
+function parseHash(){
+  let raw = (location.hash || '#home').slice(1);
+  try { raw = decodeURIComponent(raw); } catch(e){}
+  let view = 'home', band = '';
+  if (!raw) return {view, band};
+  if (/^band=/i.test(raw)){
+    view = 'catalog';
+    band = raw.slice(5).split('&')[0].split('?')[0];
+    return {view, band};
+  }
+  const parts = raw.split(/[?&]/);
+  view = parts[0] || 'home';
+  for (const part of parts.slice(1)){
+    const i = part.indexOf('=');
+    const k = i < 0 ? part : part.slice(0, i);
+    const val = i < 0 ? '' : part.slice(i + 1);
+    if (k === 'band') band = val;
+  }
+  return {view, band};
+}
 function route(){
-  let v = (location.hash || '#home').slice(1);
+  const parsed = parseHash();
+  let v = parsed.view;
   if (!$('#view-' + v)) v = 'home';
   if (v === 'success' && !lastOrder) v = 'home';
+  const arriving = $('#view-' + v) && $('#view-' + v).hidden;
   $$('.view').forEach(s => s.hidden = s.id !== 'view-' + v);
-  $$('[data-nav]').forEach(a => a.classList.toggle('active', a.dataset.nav === v));
+  $$('[data-nav]').forEach(a => a.classList.toggle('active', a.dataset.nav === v || (v === 'catalog' && a.dataset.nav === 'catalog')));
+  if (v === 'catalog'){
+    if (arriving) activeCat = 'all';
+    activeBand = resolveBandSlug(parsed.band);
+    renderBandIndex(); renderTabs(); renderGrid();
+  }
   if (v === 'checkout') renderCheckoutSummary();
   if (v === 'history') renderHistory();
   closeDrawer();
-  if (v !== 'catalog') window.scrollTo(0, 0);
+  if (arriving || v !== 'catalog') window.scrollTo(0, 0);
 }
 let toastT;
 function toast(m){ const t = $('#toast'); t.textContent = m; t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 1800); }
@@ -668,7 +856,7 @@ function applyMode(){
   $('#retailPriceTxt').textContent = money(CFG.retailPrices.default);
   $('#retailEarTxt').textContent = money(CFG.retailPrices.earrings);
   $('#unitPriceHead').textContent = isRetail() ? 'Розничные цены' : 'Цены (тираж 500–999 шт)';
-  initStatic(); renderGrid(); refreshCart();
+  initStatic(); renderBandIndex(); renderTabs(); renderGrid(); refreshCart();
   if (location.hash === '#checkout') renderCheckoutSummary();
 }
 function setMode(m){ mode = m; try { localStorage.setItem(LS_MODE, m); } catch(e){} applyMode(); toast(m === 'retail' ? 'Розница: все изделия по ' + money(CFG.retailPrices.default) : 'Опт: цены от тиража, минимум ' + num(CFG.minOrderQty) + ' шт'); }
@@ -695,10 +883,10 @@ async function loadRemoteReservations(){
   } catch(e){ console.warn('Брони из таблицы не загрузились', e); }
 }
 
-bindMode(); applyMode(); renderTabs(); bindGrid(); bindCart(); bindOrderForm(); bindCustomForm();
+bindMode(); applyMode(); renderTabs(); renderBandIndex(); bindGrid(); bindBandIndex(); bindCart(); bindOrderForm(); bindCustomForm();
 window.addEventListener('hashchange', route); route();
 loadRemoteReservations();
 let lastActive = JSON.stringify(resIndex());
 setInterval(() => { resetRes(); const a = JSON.stringify(resIndex()); if (a !== lastActive) { lastActive = a; renderGrid(); refreshCart(); } }, 60000); // истёкшие брони освобождаются без перезагрузки
-window.__merch = {calc: (pm) => calc(cart, pm), setQty, available, reservedOf, setMode, invoiceHTML, rubWords};
+window.__merch = {calc: (pm) => calc(cart, pm), setQty, available, reservedOf, setMode, invoiceHTML, rubWords, BANDS, setBand, resolveBandSlug, parseHash};
 })();

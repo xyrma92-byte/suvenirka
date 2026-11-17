@@ -35,7 +35,7 @@ window.SITE_CONFIG = {
   // Опубликованный CSV вкладки «Бронь» (Файл → Поделиться → Опубликовать в интернете → CSV). Пусто = только reservations.js + браузер
   reservationsCsvUrl: "",
   // URL веб-приложения Google Apps Script (tools/apps-script/Code.gs). Если задан — заявки сразу пишутся в «Заказы»/«Бронь»
-  appsScriptUrl: "",
+  appsScriptUrl: "https://script.google.com/macros/s/AKfycbyVU_P-LuBRC8REX1ZmrTXOCrVpk4bYqFGHOKj5qD4fRafWtAW7nvQsTXxS_I7OXNbO3A/exec",
 
   // ===== Способы оплаты и реквизиты для счетов =====
   // markupRate — надбавка к стоимости товаров в счёте и в итоге корзины при выбранном способе оплаты

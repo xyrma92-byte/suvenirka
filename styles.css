@@ -30,8 +30,11 @@ main{max-width:1280px;margin:0 auto;padding:16px 24px 60px}
 .hero-cta{display:flex;gap:12px;flex-wrap:wrap;margin:22px 0}
 .hero-facts{list-style:none;padding:0;display:flex;gap:22px;flex-wrap:wrap;color:var(--muted)}
 .hero-facts b{display:block;color:var(--text);font-size:22px}
-.hero-collage{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;transform:rotate(-3deg)}
-.hero-collage img{width:100%;aspect-ratio:1;object-fit:contain;background:#fff;border-radius:12px;padding:6px}
+.hero-collage{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;transform:rotate(-2deg)}
+.hero-collage .hero-band{display:flex;flex-direction:column;align-items:stretch;text-decoration:none;color:var(--bg);background:#fff;border-radius:14px;padding:8px 8px 6px;overflow:hidden;transition:transform .15s,box-shadow .15s}
+.hero-collage .hero-band:hover,.hero-collage .hero-band:focus-visible{transform:translateY(-3px) scale(1.03);box-shadow:0 10px 28px #0008;outline:none}
+.hero-collage .hero-band img{width:100%;aspect-ratio:1;object-fit:contain;background:#fff;border-radius:8px;padding:4px}
+.hero-collage .hero-band span{display:block;text-align:center;font-size:13px;font-weight:800;line-height:1.2;padding:4px 2px 2px;color:#1a1a1a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .section-title{margin:40px 0 14px;font-size:24px}
 .price-cards{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
 .price-card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:16px;display:flex;gap:14px;align-items:center;text-decoration:none;color:var(--text)}
@@ -74,6 +77,7 @@ main{max-width:1280px;margin:0 auto;padding:16px 24px 60px}
 .item .add{padding:9px;font-size:14px}
 .quick{display:flex;gap:6px}.quick button{flex:1;background:var(--bg2);border:1px solid var(--line);color:var(--muted);border-radius:8px;padding:4px 0;cursor:pointer;font-size:12px}
 .empty{color:var(--muted);text-align:center;padding:40px}
+.linkish{background:none;border:0;padding:0;color:var(--accent2);font:inherit;cursor:pointer;text-decoration:underline}
 /* progress */
 .progress{height:8px;background:var(--line);border-radius:99px;overflow:hidden;margin:8px 0 4px;position:relative}
 .progress i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:99px;transition:width .3s}
@@ -137,7 +141,7 @@ fieldset.checks label{margin:4px 0}
 .lightbox img{max-width:90vw;max-height:80vh;background:#fff;border-radius:12px;padding:10px}
 .lightbox div{color:#fff;text-align:center;margin-top:10px;font-weight:700}
 @media(max-width:900px){
- .hero{grid-template-columns:1fr}.hero-collage{transform:none;grid-template-columns:repeat(6,1fr)}
+ .hero{grid-template-columns:1fr}.hero-collage{transform:none;grid-template-columns:repeat(3,1fr)}
  .price-cards,.tiers{grid-template-columns:repeat(2,1fr)}
  .steps{grid-template-columns:1fr}
  .checkout-layout,.form-grid{grid-template-columns:1fr}
@@ -148,11 +152,49 @@ fieldset.checks label{margin:4px 0}
  main{padding:12px 14px 50px}
  .grid{grid-template-columns:repeat(2,1fr);gap:10px}
  .mini-progress{top:156px}
- .hero-collage{grid-template-columns:repeat(4,1fr)}
+ .hero-collage{grid-template-columns:repeat(3,1fr);gap:8px}
+ .hero-collage .hero-band{padding:5px 5px 4px;border-radius:10px}
+ .hero-collage .hero-band span{font-size:11px}
  .item .name{font-size:14px}
 }
 
+/* band index */
+.band-index{margin:4px 0 14px;background:var(--bg2);border:1px solid var(--line);border-radius:var(--r);padding:10px 12px 12px}
+.band-index-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.band-toggle{display:none;background:var(--card);border:1px solid var(--line);color:var(--text);border-radius:99px;padding:8px 12px;font-weight:700;font-size:13px;cursor:pointer}
+.band-toggle small{opacity:.7;margin-left:4px;font-weight:600}
+.band-toggle[aria-expanded="true"]{border-color:var(--accent2);color:var(--accent2)}
+#bandSearch{flex:1;min-width:140px;max-width:280px;padding:8px 12px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--text);font-size:14px}
+.band-chip{background:var(--card);border:1px solid var(--line);color:var(--muted);padding:5px 10px;border-radius:99px;cursor:pointer;font-weight:600;font-size:13px;line-height:1.2;white-space:nowrap}
+.band-chip small{opacity:.7;margin-left:4px;font-weight:600}
+.band-chip:hover{border-color:var(--accent2);color:var(--text)}
+.band-chip.active{background:var(--text);color:var(--bg);border-color:var(--text)}
+.band-chip.active small{opacity:.65;color:inherit}
+.band-chip-all{font-weight:700}
+.band-active-label{font-size:13px;font-weight:700;color:var(--accent2);white-space:nowrap}
+.band-letters{display:flex;gap:2px;overflow-x:auto;padding:8px 0 2px;scrollbar-width:thin}
+.band-letters button{flex:0 0 auto;background:transparent;border:0;color:var(--muted);font-weight:800;font-size:12px;padding:4px 6px;border-radius:6px;cursor:pointer;min-width:22px}
+.band-letters button:hover,.band-letters button:focus-visible{color:var(--accent2);background:var(--card)}
+.band-scroller{display:none;gap:6px;overflow-x:auto;padding:8px 0 2px;scrollbar-width:thin}
+.band-index-body{display:flex;flex-direction:column;gap:8px;margin-top:8px}
+.band-letter{display:flex;gap:8px;align-items:flex-start}
+.band-letter-key{flex:0 0 22px;font-weight:800;color:var(--accent2);padding-top:5px;font-size:14px;line-height:1}
+.band-letter-chips{display:flex;flex-wrap:wrap;gap:6px}
+.band-empty{color:var(--muted);margin:8px 0 0;font-size:14px}
+@media(max-width:800px){
+  .band-toggle{display:inline-flex;align-items:center}
+  .band-scroller{display:flex}
+  .band-index:not(.open) .band-index-body,
+  .band-index:not(.open) .band-letters{display:none}
+  .band-index.open .band-scroller{display:none}
+  #bandSearch{max-width:none;flex:1 1 140px}
+}
+@media(min-width:801px){
+  .band-scroller{display:none!important}
+}
+
 /* stock */
+
 .stock{display:inline-block;font-size:12px;font-weight:700;padding:3px 8px;border-radius:99px;width:fit-content}
 .stock.in{background:#163126;color:#7be3b5;border:1px solid #23573f}
 .stock.order{background:#2e2414;color:#ffcf7a;border:1px solid #5a4520}

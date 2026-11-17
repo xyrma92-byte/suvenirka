@@ -88,11 +88,24 @@
 <!-- ===== CATALOG ===== -->
 <section class="view" id="view-catalog" hidden>
   <div class="catalog-head">
-    <h1>Каталог</h1>
+    <h1 id="catalogTitle">Каталог</h1>
     <div class="catalog-tools">
       <input type="search" id="search" placeholder="Поиск по названию: Metallica, Ария…" autocomplete="off">
       <label class="stock-filter"><input type="checkbox" id="onlyStock"> Только в наличии</label>
     </div>
+  </div>
+  <div class="band-index" id="bandIndex">
+    <div class="band-index-bar">
+      <button type="button" class="band-toggle" id="bandToggle" aria-expanded="false" aria-controls="bandIndexBody">
+        Группы <small id="bandTotal"></small>
+      </button>
+      <input type="search" id="bandSearch" placeholder="Найти группу…" autocomplete="off">
+      <button type="button" class="band-chip band-chip-all" id="bandAll" data-band="">Все группы</button>
+      <span class="band-active-label" id="bandActiveLabel" hidden></span>
+    </div>
+    <div class="band-letters" id="bandLetters"></div>
+    <div class="band-scroller" id="bandScroller"></div>
+    <div class="band-index-body" id="bandIndexBody"></div>
   </div>
   <div class="tabs" id="tabs"></div>
   <div class="mini-progress" id="miniProgress"></div>
