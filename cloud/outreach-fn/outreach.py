@@ -45,6 +45,10 @@ def utm_site(rid):
     return SITE + '?' + urllib.parse.urlencode({'utm_source': 'email', 'utm_medium': 'kp', 'utm_campaign': CAMPAIGN, 'utm_content': rid})
 
 
+def sup_key(email):
+    return 'outreach/suppress/' + hashlib.sha256(email.strip().lower().encode()).hexdigest()[:24] + '.json'
+
+
 def key_for(email):
     return 'outreach/sent/' + hashlib.sha256(email.strip().lower().encode()).hexdigest()[:24] + '.json'
 
@@ -67,7 +71,10 @@ def build(email, name):
         h = h.replace('в Telegram или WhatsApp:', f'в <a href="{TG}">Telegram</a> или <a href="{WA}">WhatsApp</a>:')
         h = h.replace(e(SMTP_USER), f'<a href="mailto:{SMTP_USER}">{SMTP_USER}</a>')
         h = h.replace('настоящего металла', '<b>настоящего металла</b>', 1)
-        paras.append(f'<p>{h}</p>')
+        if block.startswith('Если неактуально'):
+            paras.append(f'<p style="font-size:12px;color:#888;margin-top:18px">{h}</p>')
+        else:
+            paras.append(f'<p>{h}</p>')
     pixel = f'<img src="{e(q(t="o"))}" width="1" height="1" alt="" style="display:block;width:1px;height:1px;border:0">' if TRACK else ''
     hb = '<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.5;color:#222;max-width:640px">' + ''.join(paras) + pixel + '</div>'
     m = EmailMessage()
@@ -95,6 +102,15 @@ def handler(event, context):
         a = json.loads(raw)
     except Exception:
         return {'statusCode': 400, 'body': json.dumps({'ok': False, 'error': 'не JSON'})}
+    if a.get('action') == 'suppress':  # {"action":"suppress","items":[{"email":..,"reason":..}]}
+        done = []
+        for it in a.get('items') or []:
+            e = str(it.get('email') or '').strip().lower()
+            if EMAIL_RE.match(e):
+                s3('PUT', sup_key(e), json.dumps({'email': e, 'reason': str(it.get('reason') or '')[:200],
+                                                  'time': dt.datetime.now(dt.timezone.utc).isoformat()}, ensure_ascii=False).encode())
+                done.append(e)
+        return {'statusCode': 200, 'body': json.dumps({'ok': True, 'suppressed': done}, ensure_ascii=False)}
     if a.get('action') == 'imap_scan':
         return {'statusCode': 200, 'body': json.dumps(imap_scan(a.get('since'), a.get('folders')), ensure_ascii=False, default=str)}
     recips = a.get('recipients') or []
@@ -113,6 +129,8 @@ def handler(event, context):
             if not EMAIL_RE.match(email) or not name:
                 rec.update(status='пропуск', reason='неверный email или нет названия'); results.append(rec); continue
             k = key_for(email)
+            if s3('HEAD', sup_key(email)).status_code == 200:  # стоп-лист: «нет» / недоставка — даже с force
+                rec.update(status='пропуск', reason='в стоп-листе (ответил «нет» или недоставка)'); results.append(rec); continue
             if not force and s3('HEAD', k).status_code == 200:
                 rec.update(status='пропуск', reason='уже отправлено ранее'); results.append(rec); continue
             if dry:
@@ -172,6 +190,40 @@ def _dec(v):
         return v or ''
 
 
+NO_RE = re.compile(r'^\W*(нет|не\s+актуально|неактуально|не\s+интересно|неинтересно|не\s+надо|не\s+пишите|отпишите|удалите|no|unsubscribe|stop|стоп)\b', re.I)
+
+
+def says_no(M, num):
+    """Первые строки ответа (до цитаты) начинаются с «нет» / «неактуально» / «отпишите» и т. п."""
+    import email as em
+    try:
+        typ, d = M.fetch(num, '(BODY.PEEK[]<0.300000>)')
+        raw = next((p[1] for p in d if isinstance(p, tuple)), b'')
+        msg = em.message_from_bytes(raw)
+        text = ''
+        for part in msg.walk():
+            if part.get_content_type() in ('text/plain', 'text/html') and not part.get_filename():
+                t = part.get_payload(decode=True) or b''
+                t = t.decode(part.get_content_charset() or 'utf-8', 'replace')
+                if part.get_content_type() == 'text/html':
+                    t = re.sub(r'<(br|p|div)[^>]*>', '\n', t, flags=re.I)
+                    t = html.unescape(re.sub(r'<[^>]+>', '', t))
+                text = t
+                if part.get_content_type() == 'text/plain':
+                    break
+        own = []
+        for line in text.splitlines():
+            l = line.strip()
+            if l.startswith('>') or re.search(r'(написал|wrote|-----\s*original|Отправлено из|Пересылаемое)', l, re.I):
+                break
+            if l:
+                own.append(l)
+        head = ' '.join(own[:3])[:300]
+        return bool(NO_RE.search(head)) or bool(re.search(r'(не\s+актуальн|неактуальн|не\s+интерес|отпишите|не\s+пишите)', head, re.I))
+    except Exception:
+        return False
+
+
 def imap_scan(since=None, folders=None):
     import imaplib, email as em
     from email.utils import parseaddr, parsedate_to_datetime
@@ -220,6 +272,8 @@ def imap_scan(since=None, folders=None):
                           or re.search(r'(undeliver|delivery status|не доставлен|недоставлен|returned mail|failure notice)', subj, re.I))
                 rec = {'folder': f, 'from': frm, 'subject': subj[:200], 'date': date,
                        'kind': 'bounce' if bounce else ('reply' if re.search(r'(^re:|^ответ|Мерч из настоящего металла)', subj, re.I) or h.get('In-Reply-To') else 'other')}
+                if rec['kind'] == 'reply' and not bounce:
+                    rec['says_no'] = says_no(M, num)
                 if bounce:
                     fr = re.findall(r'(?:Final-Recipient|Original-Recipient):\s*rfc822;\s*<?([^\s>]+)', t, re.I)
                     rec['bounce_for'] = sorted({x.lower() for x in fr}) or sorted({x.lower() for x in re.findall(r'[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}', t)
