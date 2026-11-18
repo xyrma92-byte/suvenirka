@@ -20,3 +20,7 @@ for fn in ${ONLY:-suvenirka-orders suvenirka-orders-admin}; do
     --environment "$FENV" "${extra[@]}" --source-path . --format json > /tmp/fnver.json || { cat /tmp/fnver.json; rm -f /tmp/fnver.json; exit 1; }; python3 -c "import json;d=json.load(open('/tmp/fnver.json'));print('$fn', d['id'], d['status'])"; rm -f /tmp/fnver.json
 done
 rm -f ~/.config/yandex-cloud/logs/*function_version_create* 2>/dev/null || true  # в логах yc остаётся окружение функции
+# yc пишет аргументы команд в history.jsonl — убираем строки с паролем
+[ -n "${MAILRU_APP_PASSWORD:-}" ] && [ -f ~/.config/yandex-cloud/history.jsonl ] && python3 -c "
+import os;f=os.path.expanduser('~/.config/yandex-cloud/history.jsonl');p=os.environ['MAILRU_APP_PASSWORD'].strip()
+l=open(f,errors='ignore').read().splitlines();open(f,'w').write(''.join(x+'\n' for x in l if p not in x))" || true
