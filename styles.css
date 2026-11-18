@@ -253,7 +253,7 @@ fieldset.checks label{margin:4px 0}
 .hint-box{margin-top:10px;font-size:13px;border:1px solid var(--line);border-radius:10px;padding:8px 10px;color:var(--muted)}
 .invoice-box{border:1px solid var(--ok);border-radius:var(--r);padding:14px;margin:16px 0;text-align:left;display:flex;flex-direction:column;gap:8px}
 
-/* contact buttons: Telegram, WhatsApp, Почта, телефон */
+/* contact buttons: Telegram, WhatsApp, телефон; почта — обычный текстовый mailto */
 .contact-btns{display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap}
 .contact-btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:40px;padding:8px 14px;border-radius:12px;color:#fff;text-decoration:none;font-weight:700;font-size:14px;line-height:1;white-space:nowrap;border:0}
 .contact-btn svg{width:18px;height:18px;flex-shrink:0;display:block}
@@ -261,15 +261,19 @@ fieldset.checks label{margin:4px 0}
 .contact-btn:focus-visible{outline:2px solid #fff;outline-offset:2px}
 .contact-btn.tg{background:#229ED9}
 .contact-btn.wa{background:#25D366;color:#fff}
-.contact-btn.mail{background:#4a5568}
 .contact-btn.phone{background:#2a2e39;color:var(--text);border:1px solid var(--line)}
 .contact-btn.ozon{background:#005BFF;color:#fff}
+.contact-mail{color:inherit;text-decoration:underline;text-underline-offset:3px;font-weight:600;font-size:14px;line-height:1.3;white-space:nowrap;padding:0 4px;background:none;border:0;border-radius:0}
+.contact-mail:hover{opacity:.8}
+.contact-mail:focus-visible{outline:2px solid #fff;outline-offset:2px}
 .contact-btns-header .ozon-extra{display:none}
 .contact-btns-header{flex-shrink:0}
 .contact-btns-header .contact-btn{min-height:36px;padding:6px 12px;font-size:13px}
+.contact-btns-header .contact-mail{font-size:13px}
 .contact-btns-footer{margin-top:12px}
 .contact-btns-footer .contact-btn,.contact-btns-success .contact-btn{min-height:48px;padding:12px 18px;font-size:16px;border-radius:14px}
 .contact-btns-footer .contact-btn svg,.contact-btns-success .contact-btn svg{width:22px;height:22px}
+.contact-btns-footer .contact-mail,.contact-btns-success .contact-mail{font-size:16px}
 .contact-btns-success{margin:16px 0 8px}
 .success-contacts-label{margin:16px 0 0}
 @media(max-width:1680px){
@@ -280,10 +284,12 @@ fieldset.checks label{margin:4px 0}
 @media(max-width:640px){
   .contact-btns-header{order:4;flex-basis:100%;justify-content:stretch;gap:8px;margin-top:2px}
   .contact-btns-header .contact-btn{flex:1 1 0;width:auto;height:44px;min-height:44px;min-width:44px}
+  .contact-btns-header .contact-mail{flex:1 1 100%;text-align:center;padding:6px 0}
   .mode-btn{order:2;margin-left:auto;margin-right:0}
   .cart-btn{order:3;margin-left:0}
   .contact-btns-footer .contact-btn,.contact-btns-success .contact-btn{flex:1 1 calc(50% - 8px);min-height:48px}
   .contact-btns-footer .contact-btn.ozon,.contact-btns-success .contact-btn.ozon{flex:1 1 100%}
+  .contact-btns-footer .contact-mail,.contact-btns-success .contact-mail{flex:1 1 100%;text-align:center}
 }
 
 /* =====================================================================
