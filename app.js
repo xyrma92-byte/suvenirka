@@ -747,11 +747,30 @@ function nextInvoiceNo(d = new Date()){
 function sheetComment(o){
   return [o.comment, o.delivery && 'ДОСТАВКА: ' + deliveryText(o.delivery), consentText(o.consents)].filter(Boolean).join(' | ');
 }
+// Отправка заявки с резервным каналом — обычной HTML-формой с полем payload в скрытый iframe (не зависит от fetch/CORS/блокировщиков).
+// Получатель пропускает повтор по номеру заказа, так что двойной записи не будет.
+function postViaForm(url, body){
+  try {
+    const name = 'gsSink' + Date.now();
+    const fr = document.createElement('iframe'); fr.name = name; fr.hidden = true; fr.setAttribute('aria-hidden', 'true'); fr.tabIndex = -1;
+    const fm = document.createElement('form'); fm.method = 'POST'; fm.action = url; fm.target = name; fm.hidden = true; fm.acceptCharset = 'UTF-8';
+    const inp = document.createElement('input'); inp.type = 'hidden'; inp.name = 'payload'; inp.value = body; fm.appendChild(inp);
+    document.body.append(fr, fm); fm.submit();
+    setTimeout(() => { fr.remove(); fm.remove(); }, 60000);
+  } catch(e){ console.warn('order form', e); }
+}
 function pushToSheet(o){
-  if (!CFG.appsScriptUrl) return;
+  if (!CFG.ordersApiUrl && !CFG.appsScriptUrl) return;
   let body = '';
   try { body = JSON.stringify({action:'order', order:{...o, customerComment:o.comment || '', comment:sheetComment(o), items:o.items.map(({image, ...x}) => x)}, invoiceHtml: invoiceHTML(o)}); }
   catch(e){ console.warn('Apps Script payload', e); return; }
+  // Яндекс Облако (152-ФЗ): полный заказ — в функцию (YDB в России, письма и счёт оттуда), в Google она передаёт заказ без личных данных.
+  if (CFG.ordersApiUrl) {
+    fetch(CFG.ordersApiUrl, {method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body})
+      .then(r => r.json()).then(j => { if (!j || !j.ok) throw new Error((j && j.error) || 'нет ответа'); })
+      .catch(err => { console.warn('orders API', err); postViaForm(CFG.ordersApiUrl, body); });
+    return;
+  }
   // 1) основной канал — fetch (text/plain, no-cors)
   try { fetch(CFG.appsScriptUrl, {method:'POST', mode:'no-cors', headers:{'Content-Type':'text/plain;charset=utf-8'}, body}).catch(err => console.warn('Apps Script fetch', err)); }
   catch(e){ console.warn('Apps Script fetch', e); }

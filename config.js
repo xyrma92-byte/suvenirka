@@ -48,6 +48,10 @@ window.SITE_CONFIG = {
   reservationsCsvUrl: "",
   // URL веб-приложения Google Apps Script (tools/apps-script/Code.gs). Если задан — заявки сразу пишутся в «Заказы»/«Бронь»
   appsScriptUrl: "https://script.google.com/macros/s/AKfycbyVU_P-LuBRC8REX1ZmrTXOCrVpk4bYqFGHOKj5qD4fRafWtAW7nvQsTXxS_I7OXNbO3A/exec",
+  // Приём заказов в Яндекс Облаке (cloud/orders-fn). Если задан — заказ уходит сюда, а не напрямую в Apps Script:
+  // личные данные хранятся в YDB (Россия), письма и счёт отправляет функция, в Google-таблицу попадает заказ без личных данных.
+  // Брони для карточек по-прежнему читаются из appsScriptUrl (?action=reservations). Пусто = старая схема.
+  ordersApiUrl: "https://functions.yandexcloud.net/d4e8gfk3k2te99udnmke",
 
 
   // ===== Доставка =====
