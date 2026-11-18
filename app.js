@@ -204,6 +204,10 @@ function setQty(id, q){
   if (q > 0) cart[id] = q; else delete cart[id];
   save(LS_CART, cart); refreshCart(); refreshCard(id);
 }
+const METRIKA_ID = 114317415;
+function reachGoal(name){
+  if (typeof ym === 'function') ym(METRIKA_ID, 'reachGoal', name);
+}
 
 // ---------- contacts ----------
 const ICO_TG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg>';
@@ -411,7 +415,7 @@ function bindGrid(){
     if (e.target.closest('[data-zoom]')) return zoom(p);
     if (e.target.dataset.step) apply(cur + Number(e.target.dataset.step));
     else if (e.target.dataset.plus) apply(cur + Number(e.target.dataset.plus) - (inCart || pending[id] !== undefined ? 0 : cur));
-    else if (e.target.hasAttribute('data-add')) { if (cur <= 0) { toast('Укажите количество'); return; } setQty(id, cur); delete pending[id]; toast(`«${p.name}» — ${num(cur)} ${unitWord(p)} в корзине`); }
+    else if (e.target.hasAttribute('data-add')) { if (cur <= 0) { toast('Укажите количество'); return; } setQty(id, cur); delete pending[id]; toast(`«${p.name}» — ${num(cur)} ${unitWord(p)} в корзине`); reachGoal('add_to_cart'); }
     else if (e.target.hasAttribute('data-remove')) { setQty(id, 0); }
   });
   grid.addEventListener('change', e => {
@@ -598,6 +602,7 @@ function openCustomModal(){
     if (!cat || q < 1 || !desc) { $('[data-cmerr]', d).textContent = !desc ? 'Опишите, что изобразить' : 'Укажите количество'; return; }
     customs.push({cid: Date.now().toString(36) + Math.random().toString(36).slice(2, 5), category: cat, qty: q, desc: desc.slice(0, 400), link: link.slice(0, 300)});
     saveCustoms(); refreshCart(); d.remove(); openDrawer(); toast('Позиция по своему дизайну добавлена');
+    reachGoal('custom_design_add');
   });
   setTimeout(() => f.elements.cmDesc.focus(), 50);
 }
@@ -817,6 +822,7 @@ function bindOrderForm(){
     cart = {}; save(LS_CART, cart); customs = []; saveCustoms(); refreshCart(); renderGrid(); f.reset();
     $$('[data-touched]', f).forEach(i => delete i.dataset.touched); updateDeliveryFields(); renderCheckoutSummary();
     showSuccess(order, !w);
+    reachGoal('order_submit');
   });
 }
 
@@ -855,6 +861,7 @@ function bindCustomForm(){
     addHistory(order);
     f.reset(); customFiles = []; $('#fileList').innerHTML = ''; updateFee();
     showSuccess(order);
+    reachGoal('order_submit');
     setTimeout(() => { location.href = mailto(order); }, 400);
   });
 }
@@ -1154,7 +1161,16 @@ async function loadRemoteReservations(){
   } catch(e){ console.warn('Брони из таблицы не загрузились', e); }
 }
 
-bindMode(); applyMode(); renderTabs(); renderBandIndex(); bindGrid(); bindBandIndex(); bindFittings(); bindCart(); bindOrderForm(); bindCustomForm();
+function bindContacts(){
+  document.addEventListener('click', e => {
+    const a = e.target.closest('a.contact-btn');
+    if (!a) return;
+    if (a.classList.contains('tg')) reachGoal('contact_tg');
+    else if (a.classList.contains('wa')) reachGoal('contact_wa');
+    else if (a.classList.contains('mail')) reachGoal('contact_mail');
+  });
+}
+bindMode(); applyMode(); renderTabs(); renderBandIndex(); bindGrid(); bindBandIndex(); bindFittings(); bindCart(); bindOrderForm(); bindCustomForm(); bindContacts();
 window.addEventListener('hashchange', route); route();
 loadRemoteReservations();
 let lastActive = JSON.stringify(resIndex());
