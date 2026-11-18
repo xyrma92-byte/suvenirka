@@ -15,7 +15,7 @@ from email.utils import formataddr, make_msgid, formatdate
 import requests
 import ydb
 
-VERSION = 'cloud-2026-11-18.1'
+VERSION = 'cloud-2026-11-18.2'
 MSK = dt.timezone(dt.timedelta(hours=3))
 ALLOWED_ORIGINS = [o.strip() for o in os.environ.get('ALLOWED_ORIGINS', 'https://xyrma92-byte.github.io').split(',') if o.strip()]
 SELLER_EMAIL = os.environ.get('SELLER_EMAIL', 'iptns@mail.ru')
@@ -539,6 +539,42 @@ def push_to_sheet(o):
         return f'ошибка: {type(err).__name__}: {err}'
 
 
+# ---------------- Трекинг рассылки КП: пиксель открытия и переходы по ссылкам ----------------
+# GET ?t=o&r=<rid>&c=<кампания>            → прозрачный GIF 1×1, событие open
+# GET ?t=c&r=<rid>&c=<кампания>&l=site|ozon → 302 на разрешённую ссылку (не открытый редирект), событие click
+# Событие — пустой объект в бакете: outreach/events/<ГГГГММДД>/<тип>~<rid>~<ссылка>~<кампания>~<мс>~<rand>
+PIXEL = base64.b64decode('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7')
+TRACK_LINKS = {'site': 'https://xyrma92-byte.github.io/suvenirka/', 'ozon': 'https://ozon.ru/s/ip-taran-2983954'}
+RID_RE = re.compile(r'^[0-9a-f]{6,16}$')
+CAMP_RE = re.compile(r'^[a-z0-9_]{1,40}$')
+
+
+def track(event, context, qs):
+    global _ctx_token
+    _ctx_token = (getattr(context, 'token', None) or {}).get('access_token') if context is not None else None
+    kind = 'open' if qs.get('t') == 'o' else 'click'
+    rid = str(qs.get('r') or '').lower()
+    camp = str(qs.get('c') or 'kp_metal_2026_11').lower()
+    link = str(qs.get('l') or 'site').lower()
+    if link not in TRACK_LINKS:
+        link = 'site'
+    ok = bool(RID_RE.match(rid)) and bool(CAMP_RE.match(camp))
+    if ok and BUCKET:
+        now = dt.datetime.now(dt.timezone.utc)
+        key = f'outreach/events/{now.strftime("%Y%m%d")}/{kind}~{rid}~{link if kind == "click" else "-"}~{camp}~{int(now.timestamp()*1000)}~{os.urandom(3).hex()}'
+        try:
+            s3('PUT', key, b'')
+        except Exception as err:
+            print('track', err)
+    if kind == 'open':
+        return {'statusCode': 200, 'isBase64Encoded': True, 'body': base64.b64encode(PIXEL).decode(),
+                'headers': {'Content-Type': 'image/gif', 'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0', 'Pragma': 'no-cache'}}
+    url = TRACK_LINKS[link]
+    if link == 'site':
+        url += '?' + urllib.parse.urlencode({'utm_source': 'email', 'utm_medium': 'kp', 'utm_campaign': camp, 'utm_content': rid if ok else 'x'})
+    return {'statusCode': 302, 'headers': {'Location': url, 'Cache-Control': 'no-store'}, 'body': ''}
+
+
 # ---------------- HTTP ----------------
 def cors(event):
     h = {k.lower(): v for k, v in (event.get('headers') or {}).items()}
@@ -580,6 +616,9 @@ def _handler(event, context):
     if method == 'OPTIONS':
         return {'statusCode': 204, 'headers': cors(event), 'body': ''}
     if method == 'GET':
+        qs = event.get('queryStringParameters') or {}
+        if qs.get('t') in ('o', 'c'):
+            return track(event, context, qs)
         return reply(event, 200, {'ok': True, 'version': VERSION, 'service': 'suvenirka-orders'})
     if method != 'POST':
         return reply(event, 405, {'ok': False, 'error': 'метод не поддерживается'})

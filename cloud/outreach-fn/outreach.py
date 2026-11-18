@@ -33,6 +33,18 @@ def s3(method, key, data=None):
                             headers={'X-YaCloud-SubjectToken': token(), **({'Content-Type': 'application/json'} if data else {})})
 
 
+TRACK = os.environ.get('TRACK_URL', '')  # публичная функция suvenirka-orders (?t=o / ?t=c)
+CAMPAIGN = os.environ.get('CAMPAIGN', 'kp_metal_2026_11')
+
+
+def rid_for(email):
+    return hashlib.sha256(email.strip().lower().encode()).hexdigest()[:10]
+
+
+def utm_site(rid):
+    return SITE + '?' + urllib.parse.urlencode({'utm_source': 'email', 'utm_medium': 'kp', 'utm_campaign': CAMPAIGN, 'utm_content': rid})
+
+
 def key_for(email):
     return 'outreach/sent/' + hashlib.sha256(email.strip().lower().encode()).hexdigest()[:24] + '.json'
 
@@ -40,19 +52,24 @@ def key_for(email):
 def build(email, name):
     body = open(os.path.join(HERE, 'body.txt'), encoding='utf-8').read().replace('{Название}', name)
     e = lambda s: html.escape(s, quote=True)
-    # текст: ссылки после фраз; HTML: ссылки спрятаны в слова
-    text = (body.replace('можно на нашем сайте.', f'можно на нашем сайте: {SITE}')
+    rid = rid_for(email)
+    q = lambda **kw: TRACK + '?' + urllib.parse.urlencode({**kw, 'r': rid, 'c': CAMPAIGN})
+    site_href = q(t='c', l='site') if TRACK else utm_site(rid)
+    ozon_href = q(t='c', l='ozon') if TRACK else OZON
+    # текст: ссылки после фраз (сайт с UTM); HTML: ссылки спрятаны в слова и идут через трекинг-редирект
+    text = (body.replace('можно на нашем сайте.', f'можно на нашем сайте: {utm_site(rid)}')
                 .replace('в нашем магазине на Ozon.', f'в нашем магазине на Ozon: {OZON}'))
     paras = []
     for block in body.strip().split('\n\n'):
         h = '<br>'.join(e(x) for x in block.split('\n'))
-        h = h.replace('на нашем сайте', f'<a href="{SITE}">на нашем сайте</a>')
-        h = h.replace('в нашем магазине на Ozon', f'<a href="{OZON}">в нашем магазине на Ozon</a>')
+        h = h.replace('на нашем сайте', f'<a href="{e(site_href)}">на нашем сайте</a>')
+        h = h.replace('в нашем магазине на Ozon', f'<a href="{e(ozon_href)}">в нашем магазине на Ozon</a>')
         h = h.replace('в Telegram или WhatsApp:', f'в <a href="{TG}">Telegram</a> или <a href="{WA}">WhatsApp</a>:')
         h = h.replace(e(SMTP_USER), f'<a href="mailto:{SMTP_USER}">{SMTP_USER}</a>')
         h = h.replace('настоящего металла', '<b>настоящего металла</b>', 1)
         paras.append(f'<p>{h}</p>')
-    hb = '<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.5;color:#222;max-width:640px">' + ''.join(paras) + '</div>'
+    pixel = f'<img src="{e(q(t="o"))}" width="1" height="1" alt="" style="display:block;width:1px;height:1px;border:0">' if TRACK else ''
+    hb = '<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.5;color:#222;max-width:640px">' + ''.join(paras) + pixel + '</div>'
     m = EmailMessage()
     m['Subject'] = SUBJECT.replace('{Название}', name)
     m['From'] = formataddr((FROM_NAME, SMTP_USER))
@@ -78,6 +95,8 @@ def handler(event, context):
         a = json.loads(raw)
     except Exception:
         return {'statusCode': 400, 'body': json.dumps({'ok': False, 'error': 'не JSON'})}
+    if a.get('action') == 'imap_scan':
+        return {'statusCode': 200, 'body': json.dumps(imap_scan(a.get('since'), a.get('folders')), ensure_ascii=False, default=str)}
     recips = a.get('recipients') or []
     if not isinstance(recips, list) or len(recips) > int(os.environ.get('MAX_PER_CALL', '60')):
         return {'statusCode': 400, 'body': json.dumps({'ok': False, 'error': 'список пуст или больше лимита на вызов'})}
@@ -114,7 +133,7 @@ def handler(event, context):
                     rec.update(status='отклонён адрес', smtp_code=code, smtp_resp=resp.decode(errors='replace')[:200]); results.append(rec)
                     continue
                 code, resp = smtp.data(m.as_bytes())
-                rec.update(status='отправлено' if code == 250 else 'ошибка', smtp_code=code, smtp_resp=resp.decode(errors='replace')[:200],
+                rec.update(status='отправлено' if code == 250 else 'ошибка', rid=rid_for(email), campaign=CAMPAIGN, smtp_code=code, smtp_resp=resp.decode(errors='replace')[:200],
                            message_id=m['Message-ID'], time=dt.datetime.now(dt.timezone.utc).isoformat())
                 if code == 250:
                     s3('PUT', k, json.dumps(rec, ensure_ascii=False).encode())
@@ -142,3 +161,75 @@ def handler(event, context):
         except Exception as err:
             out['log_error'] = str(err)
     return {'statusCode': 200, 'body': json.dumps(out, ensure_ascii=False)}
+
+
+# ---------------- Ответы и недоставки: чтение ящика только на чтение (EXAMINE + BODY.PEEK, флаги не меняются) ----------------
+def _dec(v):
+    from email.header import decode_header, make_header
+    try:
+        return str(make_header(decode_header(v or '')))
+    except Exception:
+        return v or ''
+
+
+def imap_scan(since=None, folders=None):
+    import imaplib, email as em
+    from email.utils import parseaddr, parsedate_to_datetime
+    since_d = dt.date.fromisoformat(since) if since else dt.date.today() - dt.timedelta(days=7)
+    out = {'ok': True, 'since': since_d.isoformat(), 'messages': [], 'folders': []}
+    M = imaplib.IMAP4_SSL('imap.mail.ru', 993, timeout=30)
+    try:
+        M.login(SMTP_USER, os.environ['MAILRU_APP_PASSWORD'])
+        typ, lst = M.list()
+        names = []
+        for raw in lst or []:
+            line = raw.decode(errors='replace')
+            mm = re.search(r'\(([^)]*)\) "[^"]*" (.+)$', line)
+            if mm:
+                names.append((mm.group(1), mm.group(2).strip().strip('"')))
+        want = folders or ['INBOX']
+        if not folders:
+            # Спам (&BCEEPwQwBDw- = «Спам» в IMAP-кодировке) и автопапки mail.ru внутри «Входящих»
+            want += [n for fl, n in names if '\\Junk' in fl or n in ('Spam', 'Junk', '&BCEEPwQwBDw-') or n.startswith('INBOX/')]
+        out['folders'] = want
+        out['all_folders'] = [n for fl, n in names]
+        crit = '(SINCE "%s")' % since_d.strftime('%d-%b-%Y')
+        for f in want:
+            typ, _ = M.select('"%s"' % f, readonly=True)  # EXAMINE: не помечаем прочитанным
+            if typ != 'OK':
+                continue
+            typ, data = M.search(None, crit)
+            for num in (data[0].split() if data and data[0] else [])[-500:]:
+                typ, d = M.fetch(num, '(BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE IN-REPLY-TO REFERENCES CONTENT-TYPE)] BODY.PEEK[TEXT]<0.20000>)')
+                hdr, txt = b'', b''
+                for part in d:
+                    if isinstance(part, tuple):
+                        if b'HEADER' in part[0]:
+                            hdr = part[1]
+                        else:
+                            txt = part[1]
+                h = em.message_from_bytes(hdr)
+                frm = parseaddr(_dec(h.get('From')))[1].lower()
+                subj = _dec(h.get('Subject'))
+                try:
+                    date = parsedate_to_datetime(h.get('Date')).isoformat()
+                except Exception:
+                    date = h.get('Date')
+                t = txt.decode('utf-8', 'replace')
+                bounce = (frm.startswith(('mailer-daemon', 'postmaster')) or 'delivery-status' in (h.get('Content-Type') or '').lower()
+                          or re.search(r'(undeliver|delivery status|не доставлен|недоставлен|returned mail|failure notice)', subj, re.I))
+                rec = {'folder': f, 'from': frm, 'subject': subj[:200], 'date': date,
+                       'kind': 'bounce' if bounce else ('reply' if re.search(r'(^re:|^ответ|Мерч из настоящего металла)', subj, re.I) or h.get('In-Reply-To') else 'other')}
+                if bounce:
+                    fr = re.findall(r'(?:Final-Recipient|Original-Recipient):\s*rfc822;\s*<?([^\s>]+)', t, re.I)
+                    rec['bounce_for'] = sorted({x.lower() for x in fr}) or sorted({x.lower() for x in re.findall(r'[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}', t)
+                                                                               if not x.lower().startswith(('mailer-daemon', 'postmaster')) and x.lower() != SMTP_USER})[:5]
+                    st = re.search(r'Status:\s*([245]\.\d+\.\d+)', t)
+                    rec['status'] = st.group(1) if st else ''
+                out['messages'].append(rec)
+    finally:
+        try:
+            M.logout()
+        except Exception:
+            pass
+    return out
