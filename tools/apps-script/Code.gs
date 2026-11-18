@@ -4,6 +4,8 @@
  * → Развернуть → Новое развертывание → Веб-приложение (выполнять от моего имени, доступ: все) → URL вставить в config.js → appsScriptUrl.
  *
  *  • doPost — сайт присылает заявку: строка в «Заказы» (статус «бронь») + строки в «Бронь»; клиенту уходит письмо со счётом (SEND_INVOICE_EMAIL).
+ *    Если заявка пришла из функции Яндекс Облака (source: 'cloud'), в ней нет личных данных (они хранятся в YDB, 152-ФЗ),
+ *    а письма клиенту и продавцу уже отправлены из Облака — здесь только брони, склад и статусы.
  *  • doGet?action=reservations — активные брони для сайта (к продаже = остаток − бронь).
  *  • onOrderEdit — менеджер ставит в «Заказы» статус «оплачен» → списывается «Количество» на вкладке «Склад …» (один раз).
  *    «снята» → бронь освобождается.
@@ -75,7 +77,7 @@ function setup(){
   ScriptApp.newTrigger('expireReservations').timeBased().everyHours(1).create();
 }
 
-const SCRIPT_VERSION = '2026-11-17.6';
+const SCRIPT_VERSION = '2026-11-18.1';
 const LOG_TAB = 'Лог', LOG_HEAD = ['Время', 'Событие', 'Заказ', 'Сообщение', 'Подробности'];
 
 // ---------- Надёжная запись: без appendRow/getLastRow ----------
@@ -264,6 +266,8 @@ function doPost(e){
     trace.spreadsheetId = ss().getId();
     trace.stage = 'разбор заявки';
     const data = parsePayload(e), o = data.order || {};
+    // source: 'cloud' — заказ пришёл из функции Яндекс Облака: без личных данных (они в YDB), письма уже отправлены оттуда
+    const fromCloud = data.source === 'cloud'; trace.source = fromCloud ? 'cloud' : 'site';
     id = o.id || ''; trace.id = id;
     if (!id) throw new Error('нет order.id');
     const pay = o.payment || {}, inv = o.invoice || {}, ct = o.contact || {}, tt = o.totals || {}, rs = o.reservation || {}, lines = rs.lines || [];
@@ -293,12 +297,13 @@ function doPost(e){
     trace.orderRow = writeRows(ord, [row]);
     trace.stage = 'запись в «Бронь»';
     trace.resRow = writeRows(res, lines.map(l => [id, fmt(created), fmt(until), l.productId || '', l.productName || '', l.category || '', Number(l.qty) || 0,
-      'бронь', pay.label || '', ct.company || ct.name || '', (l.stockRows || []).join(' | '), '']));
+      'бронь', pay.label || '', fromCloud ? 'в Облаке (YDB)' : (ct.company || ct.name || ''), (l.stockRows || []).join(' | '), '']));
     lock.releaseLock(); lock = null;
     trace.stage = 'лог';
     trace.logRow = logRow('заказ', id, 'записан: строка ' + trace.orderRow + ' в «Заказы», ' + lines.length + ' строк брони с ' + (trace.resRow || '—'), (o.delivery && o.delivery.service) || '');
     trace.stage = 'письма';
-    sendOrderEmails(data, o, id, trace);
+    if (fromCloud) { trace.mail = 'отправлены из Яндекс Облака'; logRow('письма', id, 'отправлены из Яндекс Облака (здесь не отправляются)', 'источник: ' + (data.version || 'cloud')); }
+    else sendOrderEmails(data, o, id, trace);
     trace.stage = 'готово'; remember('lastPost', trace);
     return jsonOut({ok: true, version: SCRIPT_VERSION, orderRow: trace.orderRow, resRow: trace.resRow, logRow: trace.logRow});
   } catch (err) {
