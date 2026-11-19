@@ -573,3 +573,9 @@ a{color:var(--accent2)}
 .sample-total{margin:6px 0 14px;line-height:1.7}
 .sample-grand{font-size:17px}
 .nav-sample{color:var(--accent2)}
+
+/* site-wide background = same as start screen (stage.jpg + dark overlay) */
+body{background:#0a0a0f}
+body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;background:linear-gradient(180deg,rgba(10,10,15,.78),rgba(10,10,15,.92)),url("images/bg/stage.jpg") center/cover no-repeat,#0a0a0f}
+.band-index,.mini-progress{background:rgba(21,23,29,.88)}
+.card,.item,.price-card,.tier,.steps li{background:rgba(27,30,38,.92)}
