@@ -564,3 +564,12 @@ a{color:var(--accent2)}
   .drawer-foot .totals{row-gap:2px}
   .drawer-foot .btn.big{padding:12px 16px}
 }
+
+/* ===== Заказать образец ===== */
+.sample-types{flex-direction:column;align-items:stretch}
+.sample-type{display:flex!important;flex-direction:row!important;align-items:center;gap:8px;flex-wrap:wrap}
+.sample-qty{width:76px!important;margin-left:auto;padding:6px 8px}
+.sample-qty:disabled{opacity:.35}
+.sample-total{margin:6px 0 14px;line-height:1.7}
+.sample-grand{font-size:17px}
+.nav-sample{color:var(--accent2)}

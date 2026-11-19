@@ -29,7 +29,7 @@ const CONF = {
   // Новые колонки «Заказы» — добавляются в конец, если их ещё нет
   EXTRA_COLS: ['Служба доставки', 'Город доставки', 'Адрес / ПВЗ', 'Индекс', 'Получатель', 'Телефон получателя',
     'Комментарий к доставке', 'Оплата доставки', 'Трек-номер', 'Согласие на обработку ПД', 'Согласие с условиями',
-    'Согласие на рассылку', 'Дата и время согласий', 'Версия документов', 'Товары']
+    'Согласие на рассылку', 'Дата и время согласий', 'Версия документов', 'Товары', 'Тип заказа']
 };
 const ss = () => SpreadsheetApp.getActive();
 const sh = n => ss().getSheetByName(n);
@@ -58,9 +58,12 @@ function extraValues(o){
     'Оплата доставки': d.payer || '', 'Трек-номер': '',
     'Согласие на обработку ПД': o.consents ? yn(c.personalData) : '', 'Согласие с условиями': o.consents ? yn(c.terms) : '',
     'Согласие на рассылку': o.consents ? yn(c.marketing) : '', 'Дата и время согласий': c.acceptedAt ? fmt(c.acceptedAt) : '',
-    'Версия документов': c.docsVersion || '', 'Товары': itemsCell(o)
+    'Версия документов': c.docsVersion || '', 'Товары': itemsCell(o), 'Тип заказа': orderKind(o)
   };
 }
+// Тип заказа: «Образец» (кнопка «Заказать образец» на сайте) или обычный заказ из каталога
+const isSample = o => !!(o && (o.sample || o.orderType === 'Образец' || o.typeName === 'Образец'));
+const orderKind = o => isSample(o) ? 'Образец' : 'Заказ из каталога';
 function deliveryHtml(o){
   const d = o.delivery; if (!d) return '';
   const e = v => String(v == null ? '' : v).replace(/[&<>"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]));
@@ -77,7 +80,7 @@ function setup(){
   ScriptApp.newTrigger('expireReservations').timeBased().everyHours(1).create();
 }
 
-const SCRIPT_VERSION = '2026-11-18.1';
+const SCRIPT_VERSION = '2026-11-19.1';
 const LOG_TAB = 'Лог', LOG_HEAD = ['Время', 'Событие', 'Заказ', 'Сообщение', 'Подробности'];
 
 // ---------- Надёжная запись: без appendRow/getLastRow ----------
@@ -165,6 +168,8 @@ function deliveryLine(o){
 const unitShort = u => u === 'комплект' ? 'компл.' : u === 'услуга' ? 'усл.' : 'шт';
 // Статус позиции: из наличия (бронь) / под заказ / свой дизайн / услуга
 function itemStatus(i){
+  if (i.sample && i.fee) return 'образец: разработка дизайна';
+  if (i.sample) return 'образец, под заказ';
   if (i.fee) return 'разово, без скидки';
   if (i.custom) return 'свой дизайн, под заказ';
   const a = Number(i.inStockQty) || 0, b = Number(i.madeToOrderQty) || 0;
@@ -192,7 +197,7 @@ function customerMail(o, id){
   const dlv = !d ? '' : pickup ? 'Получение: ' + deliveryLine(o) + '.'
     : 'Доставка: ' + deliveryLine(o) + '. Доставка оплачивается получателем при получении по тарифу службы, отправка из г. Павловск после оплаты заказа; трек-номер пришлём.';
   const items = itemsList(o);
-  const subject = 'Ваш заказ № ' + id + ' — счёт № ' + num;
+  const subject = (isSample(o) ? 'Ваш образец № ' : 'Ваш заказ № ') + id + ' — счёт № ' + num;
   const text = [hello, '',
     'Вы оформили заказ № ' + id + ' на сумму ' + sum + '. Счёт № ' + num + ' во вложении (PDF).',
     until && (rs.lines || []).length ? 'Товар из наличия забронирован до ' + until + ' — оплатите, пожалуйста, до этого времени.' : (until ? 'Счёт действителен до ' + until + '.' : ''),
@@ -214,13 +219,13 @@ function customerMail(o, id){
 function sellerMail(o, id){
   const inv = o.invoice || {}, ct = o.contact || {}, tt = o.totals || {}, rs = o.reservation || {}, pay = o.payment || {}, d = o.delivery || {};
   const sum = rub(tt.grand || tt.total);
-  const rows = [['Заказ', id], ['Счёт', inv.number || ''], ['Сумма к оплате', sum], ['Способ оплаты', pay.label || ''], ['Режим', o.modeName || ''],
+  const rows = [['Тип', orderKind(o)], ['Заказ', id], ['Счёт', inv.number || ''], ['Сумма к оплате', sum], ['Способ оплаты', pay.label || ''], ['Режим', o.modeName || ''],
     ['Покупатель', [ct.company, ct.name].filter(Boolean).join(', ')], ['Телефон', ct.phone || ''], ['Почта', ct.email || ''],
     ['Доставка', deliveryLine(o)], ['Получатель', [d.recipientName, d.recipientPhone].filter(Boolean).join(', ')], ['Оплата доставки', d.payer || ''],
     ['Комментарий', [o.customerComment, d.comment].filter(Boolean).join(' | ')], ['Бронь до', rs.expiresAt ? fmt(rs.expiresAt) : '']]
     .filter(r => String(r[1] || '').trim());
   const items = itemsList(o);
-  const subject = 'Новый заказ ' + id + ' — ' + sum;
+  const subject = (isSample(o) ? '🧪 ОБРАЗЕЦ: новый заказ ' : 'Новый заказ ') + id + ' — ' + sum;
   const text = rows.map(r => r[0] + ': ' + r[1]).join('\n') + (items.length ? '\n\nСостав:\n' + items.map(x => '• ' + x).join('\n') : '') +
     '\n\nСчёт — во вложении. После оплаты поставьте в «Заказы» статус «оплачен».';
   const html = '<div style="font:14px/1.45 Arial,Helvetica,sans-serif;color:#111;max-width:680px"><table style="border-collapse:collapse">' +
@@ -287,8 +292,8 @@ function doPost(e){
     let h = {};
     try { h = ensureOrderColumns(); } catch (err) { logRow('ошибка колонок', id, err); }
     const width = Math.max(ord.getLastColumn(), CONF.BASE_COLS);
-    const row = [id, fmt(created), o.modeName || '', pay.label || '', inv.number || '', ct.name || '', ct.phone || '', ct.email || '', ct.company || '',
-      tt.total || 0, tt.markup || 0, tt.grand || tt.total || 0, fmt(until), 'бронь', '',
+    const row = [id, fmt(created), isSample(o) ? 'Образец' : (o.modeName || ''), pay.label || '', inv.number || '', ct.name || '', ct.phone || '', ct.email || '', ct.company || '',
+      tt.total || 0, tt.markup || 0, tt.grand || tt.total || 0, fmt(until), isSample(o) ? 'ожидает оплаты' : 'бронь', '',
       o.customerComment != null ? o.customerComment : (o.comment || '')];
     while (row.length < width) row.push('');
     try { const ex = extraValues(o); Object.keys(ex).forEach(k => { if (h[k] != null && h[k] >= CONF.BASE_COLS) row[h[k]] = ex[k]; }); }

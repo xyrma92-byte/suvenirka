@@ -248,6 +248,8 @@ function initStatic(){
   $$('.maxkb').forEach(e => e.textContent = CFG.maxAttachmentKB);
   $$('.designFee').forEach(e => e.textContent = money(CFG.designFee));
   $$('.leadTime').forEach(e => e.textContent = CFG.madeToOrderLead);
+  $$('[data-sp]').forEach(e => e.textContent = money(sampleUnit(e.dataset.sp)) + (e.dataset.sp === 'earrings' ? '/компл.' : ''));
+  if ($('#sampleUnitTxt')) $('#sampleUnitTxt').textContent = money(sampleUnit('keychains'));
   $$('.emailTo').forEach(e => e.textContent = CFG.email || 'нашу почту');
   // collage: six featured bands, each links to the catalog filtered by that band
   $('#heroCollage').innerHTML = FEATURED_BANDS.map(b =>
@@ -865,6 +867,88 @@ function bindCustomForm(){
   });
 }
 
+// ---------- образец (Заказать образец) ----------
+// Цена: designFee ₽ за каждую новую позицию дизайна + retailPrices ₽ за единицу изделия (серьги — за комплект). Режим опт/розница не влияет.
+function sampleUnit(cat){ const rp = CFG.retailPrices || {default:600}; return rp[cat] ?? rp.default; }
+function sampleCalc(types, designs, pmId){
+  const lines = Object.entries(types).filter(([c,q]) => CAT_NAME[c] && c !== 'all' && Number(q) > 0).map(([c,q]) => ({category:c, qty:Math.round(Number(q)), unit:sampleUnit(c)}));
+  const nd = Math.max(0, Math.round(Number(designs) || 0)), fee = Number(CFG.designFee) || 0;
+  const itemsSum = r2(lines.reduce((s,l) => s + l.unit * l.qty, 0)), designFees = r2(nd * fee), total = r2(itemsSum + designFees);
+  const pm = PM[pmId] || null, markupRate = pm ? (pm.markupRate || 0) : 0, markup = r2(total * markupRate);
+  return {lines, designs:nd, designFee:fee, itemsSum, designFees, total, pm, markupRate, markup, grand:r2(total + markup), totalQty:lines.reduce((s,l)=>s+l.qty,0)};
+}
+function bindSampleForm(){
+  const f = $('#sampleForm'); if (!f) return;
+  let files = [];
+  const maxB = CFG.maxAttachmentKB * 1024;
+  const readFile = file => new Promise(res => {
+    const base = {name:file.name, size:file.size, type:file.type};
+    if (!file.type.startsWith('image/')) return res({...base, included:false, note:'Не изображение — пришлите ссылкой или на почту'});
+    if (file.size > maxB) return res({...base, included:false, note:`Больше ${CFG.maxAttachmentKB} КБ — пришлите ссылкой или на почту`});
+    res({...base, included:true, note:''});
+  });
+  const renderFiles = () => { $('#sampleFileList').innerHTML = files.map((x,i) => `<div class="thumb ${x.included?'':'skip'}"><div>${esc(x.name)} · ${Math.round(x.size/1024)} КБ</div><div>${x.included?'✓ принят':'⚠ '+esc(x.note)}</div><button type="button" class="x" data-rmfile="${i}">убрать</button></div>`).join(''); };
+  const addFiles = async fl => { files = files.concat(await Promise.all([...fl].map(readFile))); renderFiles(); };
+  $('#sampleFiles').addEventListener('change', async e => { await addFiles(e.target.files); e.target.value = ''; });
+  $('#sampleFileList').addEventListener('click', e => { const i = e.target.dataset.rmfile; if (i === undefined) return; files.splice(Number(i), 1); renderFiles(); });
+  const zone = $('#sampleZone');
+  ['dragenter','dragover'].forEach(ev => zone.addEventListener(ev, e => { e.preventDefault(); zone.classList.add('drag'); }));
+  ['dragleave','drop'].forEach(ev => zone.addEventListener(ev, e => { e.preventDefault(); zone.classList.remove('drag'); }));
+  zone.addEventListener('drop', e => addFiles(e.dataTransfer.files));
+  $('#samplePayOptions').innerHTML = Object.values(PM).map(m => `<label class="pay-opt"><input type="radio" name="spayment" value="${m.id}" required>
+    <span><b>${esc(m.label)}</b><small>${esc(m.legalName)}</small><em>${esc(m.hint || '')}</em></span></label>`).join('');
+  const pmId = () => { const i = $('input[name=spayment]:checked', f); return i ? i.value : ''; };
+  const picked = () => { const t = {}; $$('input[name=stype]:checked', f).forEach(i => { t[i.value] = Number($(`[data-sq=${i.value}]`, f).value) || 1; }); return t; };
+  const render = () => {
+    const c = sampleCalc(picked(), $('#sampleDesigns').value, pmId());
+    $$('[data-sq]', f).forEach(i => { i.disabled = !$(`input[name=stype][value=${i.dataset.sq}]`, f).checked; });
+    $('#samplePayerLegal').hidden = !(pmId() === 'ooo' || pmId() === 'ip');
+    $('#sampleTotal').innerHTML = `Дизайн: ${c.designs} × ${money(c.designFee)} = <b>${money(c.designFees)}</b><br>` +
+      (c.lines.length ? c.lines.map(l => `${esc(CATS.find(x=>x.id===l.category).one)}: ${l.qty} × ${money(l.unit)} = <b>${money(l.unit*l.qty)}</b>`).join('<br>') : '<span class="muted">Выберите изделия — цена пересчитается.</span>') +
+      `<br>${c.markup ? `Сумма: ${money(c.total)}<br>${esc(c.pm.markupLabel || '')}: +${money(c.markup)}<br>` : ''}<span class="sample-grand">Итого к оплате: <b>${money(c.grand)}</b></span>` +
+      (!pmId() ? '<br><span class="muted">Выберите способ оплаты — итог пересчитается.</span>' : '');
+  };
+  f.addEventListener('input', render); f.addEventListener('change', render); render();
+  f.addEventListener('submit', e => {
+    e.preventDefault();
+    const types = picked(), id = pmId(), c = sampleCalc(types, $('#sampleDesigns').value, id);
+    if (!validate(f, $('#sampleError'), () => {
+      if (!c.lines.length) return 'Выберите хотя бы одно изделие';
+      if (c.designs < 1) return 'Укажите хотя бы один новый дизайн';
+      if (!id) return 'Выберите способ оплаты';
+      if (!files.length && !f.elements.filesLink.value.trim()) return 'Приложите файлы дизайна или укажите ссылку на файлы';
+      return '';
+    })) return;
+    const now = new Date(), pm = PM[id], until = reservationUntil(now), desc = f.elements.description.value.trim(), link = f.elements.filesLink.value.trim();
+    const items = c.lines.map(l => { const cn = CATS.find(x => x.id === l.category).one; return {id:'sample-' + l.category, sample:true, custom:true, name:'Образец: ' + cn, description:desc, link, category:l.category, categoryName:cn,
+        unit:customUnit(l.category), qty:l.qty, basePrice:l.unit, unitPrice:l.unit, sum:r2(l.unit * l.qty), image:'', twoClasp:false, stock:null, inStockQty:0, madeToOrderQty:l.qty, availability:'образец, под заказ'}; })
+      .concat([{id:'sample-design-fee', fee:true, sample:true, name:'Разработка дизайна (образец) — ' + c.designs + ' поз.', category:'service', categoryName:'услуга', unit:'услуга', qty:c.designs,
+        basePrice:c.designFee, unitPrice:c.designFee, sum:c.designFees, image:'', twoClasp:false, stock:null, inStockQty:0, madeToOrderQty:0, availability:'услуга, разово'}]);
+    const delivery = {kind:'sample', service:'Образец — доставка по согласованию', city:f.elements.dlvCity.value.trim(), address:f.elements.dlvAddress.value.trim(), postIndex:'',
+      recipientName:f.elements.name.value.trim(), recipientPhone:f.elements.phone.value.trim(), comment:'', payer:'получатель, по тарифу службы'};
+    const order = {type:'catalog', orderType:'Образец', sample:true, typeName:'Образец', id:newId('OB'), createdAt:now.toISOString(),
+      mode:'sample', modeName:'Образец',
+      contact:{...contactOf(f), city:delivery.city, inn:(f.elements.payerInn?.value||'').trim(), requisites:(f.elements.payerReq?.value||'').trim()},
+      comment:[f.elements.comment.value.trim(), desc && 'Описание: ' + desc, link && 'Файлы: ' + link].filter(Boolean).join(' | '),
+      delivery,
+      consents:{personalData:f.elements.consentPd.checked, terms:f.elements.consentTerms.checked, marketing:false, acceptedAt:now.toISOString(), docsVersion:(CFG.legalDocs || {}).version || '', docs:['consent.html','privacy.html','terms.html']},
+      payment:{id:pm.id, label:pm.label, legalName:pm.legalName, markupRate:c.markupRate, markupLabel:pm.markupLabel||''},
+      invoice:{number:nextInvoiceNo(now), date:now.toISOString(), payUntil:until.toISOString()},
+      items, designs:c.designs, filesLink:link, attachments:files.map(x => ({...x})),
+      attachmentsNote: files.length ? 'Файлы — только имена; сами файлы клиент пришлёт ссылкой/на почту/в Telegram' : '',
+      totals:{totalQty:c.totalQty, discountPercent:0, subtotal:c.total, discount:0, designFees:c.designFees, total:c.total, markupRate:c.markupRate, markup:c.markup, grand:c.grand, currency:'RUB'},
+      reservation:{status:'', expiresAt:until.toISOString(), lines:[]},
+      seller:{company:CFG.companyName, email:CFG.email}};
+    order.comment = '[ОБРАЗЕЦ] ' + order.comment;
+    addHistory(order);
+    pushToSheet(order);
+    const w = openInvoice(order);
+    f.reset(); files = []; renderFiles(); render();
+    showSuccess(order, !w);
+    reachGoal('sample_submit');
+  });
+}
+
 // ---------- invoice (счёт) ----------
 function rubWords(sum){
   const ones = [['','один','два','три','четыре','пять','шесть','семь','восемь','девять'],['','одна','две','три','четыре','пять','шесть','семь','восемь','девять']];
@@ -1035,6 +1119,7 @@ function showSuccess(o, popupBlocked){
   const isCat = o.type !== 'custom';
   $('#successBox').innerHTML = `<div class="big-ok">✅</div><h1>${isCat ? 'Заказ принят' : 'Заявка на дизайн принята'}</h1>
     <p class="lead" style="margin:0 auto">${isCat ? 'Номер заказа' : 'Номер заявки'} <b>${esc(o.id)}</b>. ${esc(o.contact.name)}, мы свяжемся с вами по телефону ${esc(o.contact.phone)} или почте ${esc(o.contact.email)}.</p>
+    ${o.sample ? `<p class="hint-box">🧪 Образец по вашему дизайну. ${o.filesLink ? 'Ссылку на файлы мы получили.' : 'Файлы пришлите ответом на письмо со счётом, на ' + esc(CFG.email||'почту') + ' или в Telegram/WhatsApp.'} Изготовление начнём после оплаты, срок ${esc(CFG.madeToOrderLead)}.</p>` : ''}
     <p class="muted success-contacts-label">Написать нам сейчас:</p>
     ${contactButtonsHTML('success')}
     <p class="muted">${o.type==='custom' ? `Сейчас откроется письмо на ${esc(CFG.email||'нашу почту')} — <b>приложите к нему свои варианты дизайна</b> и отправьте. Если письмо не открылось, нажмите «Отправить письмом».` : (internal ? `Скачайте файл заказа и отправьте его нам на почту${CFG.email ? ' ' + esc(CFG.email) : ''} — или нажмите «Отправить письмом».` : `Счёт продублируем на почту ${esc(o.contact.email)}. После оплаты отправим заказ и пришлём трек-номер. Вопросы — пишите в Telegram или WhatsApp.`)}</p>
@@ -1172,7 +1257,8 @@ function bindContacts(){
 bindMode(); applyMode(); renderTabs(); renderBandIndex(); bindGrid(); bindBandIndex(); bindFittings(); bindCart(); bindOrderForm(); bindCustomForm(); bindContacts();
 window.addEventListener('hashchange', route); route();
 loadRemoteReservations();
+bindSampleForm();
 let lastActive = JSON.stringify(resIndex());
 setInterval(() => { resetRes(); const a = JSON.stringify(resIndex()); if (a !== lastActive) { lastActive = a; renderGrid(); refreshCart(); } }, 60000); // истёкшие брони освобождаются без перезагрузки
-window.__merch = {calc: (pm) => calc(cart, pm), setQty, available, reservedOf, setMode, invoiceHTML, rubWords, BANDS, setBand, resolveBandSlug, parseHash};
+window.__merch = {sampleCalc, calc: (pm) => calc(cart, pm), setQty, available, reservedOf, setMode, invoiceHTML, rubWords, BANDS, setBand, resolveBandSlug, parseHash};
 })();

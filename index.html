@@ -29,7 +29,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@600;700;800;900&family=Manrope:wght@400;500;600;700;800&display=swap&subset=cyrillic" rel="stylesheet">
 <meta name="theme-color" content="#0a0a0f">
-<link rel="stylesheet" href="styles.css?v=2026111802">
+<link rel="stylesheet" href="styles.css?v=2026111901">
 <!-- Yandex.Metrika counter -->
 <script type="text/javascript">
 (function(m,e,t,r,i,k,a){m[i]=m[i]||function(){(m[i].a=m[i].a||[]).push(arguments)};
@@ -49,6 +49,7 @@ ym(114317415, "init", {clickmap:true, trackLinks:true, accurateTrackBounce:true,
     <a href="#home" data-nav="home">Главная</a>
     <a href="#catalog" data-nav="catalog">Каталог</a>
     <a href="#custom" data-nav="custom">Индивидуальный дизайн</a>
+    <a href="#sample" data-nav="sample" class="nav-sample">Заказать образец</a>
     <a href="#history" data-nav="history">Мои заказы</a>
   </nav>
   <div class="contact-btns contact-btns-header" id="headerContacts"></div>
@@ -84,6 +85,7 @@ ym(114317415, "init", {clickmap:true, trackLinks:true, accurateTrackBounce:true,
       <div class="hero-cta">
         <a class="btn primary" href="#catalog">Выбрать из каталога</a>
         <a class="btn ghost" href="#custom">Заказать свой дизайн</a>
+        <a class="btn ghost" href="#sample">🧪 Заказать образец</a>
       </div>
       <ul class="hero-facts" data-only="wholesale">
         <li><b>500 шт</b> минимальный заказ — можно миксом разных позиций</li>
@@ -283,6 +285,71 @@ ym(114317415, "init", {clickmap:true, trackLinks:true, accurateTrackBounce:true,
   </form>
 </section>
 
+<!-- ===== SAMPLE (образец) ===== -->
+<section class="view" id="view-sample" hidden>
+  <h1>Заказать образец</h1>
+  <p class="lead">Сначала проверьте качество на одном изделии — потом оптовый заказ. Образец делается по вашему дизайну: выберите изделия, укажите, сколько новых дизайнов, и приложите файлы.</p>
+  <div class="fee-banner">
+    <div><span class="muted">Новый дизайн</span><b><span class="designFee"></span> за позицию</b></div>
+    <div><span class="muted">Образец изделия (1 шт)</span><b><span id="sampleUnitTxt"></span></b></div>
+    <div class="muted">Серьги — за комплект из 2 шт · изготовление <span class="leadTime"></span></div>
+  </div>
+  <form id="sampleForm" class="card form" novalidate>
+    <div class="form-grid">
+      <div>
+        <h3>Что заказать</h3>
+        <fieldset class="checks sample-types" id="sampleTypes">
+          <legend>Изделия *</legend>
+          <label class="check sample-type"><input type="checkbox" name="stype" value="keychains"> Брелок <span class="muted">· <span data-sp="keychains"></span></span> <input type="number" min="1" step="1" value="1" class="sample-qty" data-sq="keychains" aria-label="Количество брелоков" disabled></label>
+          <label class="check sample-type"><input type="checkbox" name="stype" value="magnets"> Магнит <span class="muted">· <span data-sp="magnets"></span></span> <input type="number" min="1" step="1" value="1" class="sample-qty" data-sq="magnets" aria-label="Количество магнитов" disabled></label>
+          <label class="check sample-type"><input type="checkbox" name="stype" value="pins"> Значок <span class="muted">· <span data-sp="pins"></span></span> <input type="number" min="1" step="1" value="1" class="sample-qty" data-sq="pins" aria-label="Количество значков" disabled></label>
+          <label class="check sample-type"><input type="checkbox" name="stype" value="earrings"> Серьги (комплект) <span class="muted">· <span data-sp="earrings"></span></span> <input type="number" min="1" step="1" value="1" class="sample-qty" data-sq="earrings" aria-label="Количество комплектов серёг" disabled></label>
+        </fieldset>
+        <label>Сколько новых дизайнов (позиций) *
+          <input name="designs" type="number" min="1" step="1" value="1" id="sampleDesigns">
+        </label>
+        <label>Описание / пожелания к дизайну
+          <textarea name="description" rows="3" placeholder="Что изобразить, стиль, цвета; если макеты готовы — так и напишите"></textarea>
+        </label>
+        <div class="upload-zone" id="sampleZone">
+          <h3>Файлы дизайна</h3>
+          <p class="muted">Логотипы, макеты, референсы (JPG, PNG, WebP).</p>
+          <label class="btn primary upload-btn">📎 Выбрать файлы<input type="file" accept="image/*" multiple id="sampleFiles" hidden></label>
+          <small class="hint">Файлы до <span class="maxkb"></span> КБ попадут в заявку; остальные пришлите по ссылке ниже или на почту / в Telegram.</small>
+          <div class="thumbs" id="sampleFileList"></div>
+        </div>
+        <label>Ссылка на файлы (Google Диск, Яндекс Диск, облако)
+          <input name="filesLink" type="url" placeholder="https://…">
+        </label>
+        <div class="fee-calc sample-total" id="sampleTotal"></div>
+      </div>
+      <div>
+        <h3>Контакты</h3>
+        <label>Имя *<input name="name" required autocomplete="name"></label>
+        <label>Телефон *<input name="phone" type="tel" required autocomplete="tel" placeholder="+7 900 000-00-00"></label>
+        <label>Email *<input name="email" type="email" required autocomplete="email"></label>
+        <label>Компания / магазин<input name="company" autocomplete="organization"></label>
+        <fieldset class="pay-fieldset">
+          <legend>Способ оплаты *</legend>
+          <div class="pay-options" id="samplePayOptions"></div>
+        </fieldset>
+        <div class="payer-legal" id="samplePayerLegal" hidden>
+          <label>ИНН покупателя<input name="payerInn" inputmode="numeric" placeholder="Для счёта на организацию / ИП"></label>
+          <label>Реквизиты покупателя<input name="payerReq" placeholder="Полное название, КПП, юр. адрес"></label>
+        </div>
+        <label>Город доставки образца *<input name="dlvCity" required autocomplete="address-level2"></label>
+        <label>Адрес / пункт выдачи (СДЭК, Почта России и т. д.) *<input name="dlvAddress" required autocomplete="street-address"></label>
+        <label>Комментарий<input name="comment" placeholder="Сроки, пожелания"></label>
+        <small class="hint">Доставка образца не входит в счёт — оплачивается получателем по тарифу службы. Отправка из г. Павловск после оплаты.</small>
+        <label class="check"><input type="checkbox" name="consentPd" required> <span>Даю <a href="consent.html" target="_blank" rel="noopener">согласие на обработку персональных данных</a> *</span></label>
+        <label class="check"><input type="checkbox" name="consentTerms" required> <span>С <a href="terms.html" target="_blank" rel="noopener">условиями оплаты, доставки и возврата</a> ознакомлен(а) *</span></label>
+        <div class="form-error" id="sampleError"></div>
+        <button class="btn primary big" type="submit" id="sampleSubmit">Заказать образец и получить счёт</button>
+      </div>
+    </div>
+  </form>
+</section>
+
 <!-- ===== SUCCESS ===== -->
 <section class="view" id="view-success" hidden>
   <div class="card success" id="successBox"></div>
@@ -316,9 +383,9 @@ ym(114317415, "init", {clickmap:true, trackLinks:true, accurateTrackBounce:true,
 
 <div class="toast" id="toast"></div>
 
-<script src="config.js?v=2026111706"></script>
+<script src="config.js?v=2026111901"></script>
 <script src="products.js"></script>
 <script src="reservations.js"></script>
-<script src="app.js?v=2026111802"></script>
+<script src="app.js?v=2026111901"></script>
 </body>
 </html>
